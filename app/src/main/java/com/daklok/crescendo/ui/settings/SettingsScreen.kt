@@ -1,5 +1,8 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Crop
+import androidx.compose.material.icons.outlined.VerticalSplit
 import com.daklok.crescendo.ui.common.AUTHOR_AVATAR_URL
 import com.daklok.crescendo.ui.common.RemoteAvatar
 import com.daklok.crescendo.ui.common.IconBadge
@@ -320,6 +323,30 @@ fun SettingsSheet(
                                 )
                                 Divider()
                                 SettingSwitchRow(
+                                    icon = Icons.Outlined.VerticalSplit,
+                                    title = stringResource(R.string.half_page_turn),
+                                    subtitle = stringResource(R.string.half_page_turn_desc),
+                                    checked = settings.halfPageTurn,
+                                    onChange = { v -> update { it.copy(halfPageTurn = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.Crop,
+                                    title = stringResource(R.string.crop_margins),
+                                    subtitle = stringResource(R.string.crop_margins_desc),
+                                    checked = settings.cropMargins,
+                                    onChange = { v -> update { it.copy(cropMargins = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.DarkMode,
+                                    title = stringResource(R.string.night_mode),
+                                    subtitle = stringResource(R.string.night_mode_desc),
+                                    checked = settings.nightMode,
+                                    onChange = { v -> update { it.copy(nightMode = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
                                     icon = Icons.Outlined.LightMode,
                                     title = stringResource(R.string.keep_screen_on),
                                     subtitle = stringResource(R.string.keep_screen_on_desc),
@@ -596,6 +623,12 @@ private fun AboutCard() {
                 modifier = Modifier.size(16.dp),
             )
         }
+        // licencia zvuku klavíra (CC BY 3.0 vyžaduje uvedenie autora)
+        Text(
+            stringResource(R.string.piano_samples_credit),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

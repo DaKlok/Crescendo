@@ -225,7 +225,9 @@ fun MetronomePanel(
                     stringResource(R.string.metronome),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 4.dp),
                 )
                 IconButton(onClick = {
                     engine.sound = !engine.sound
@@ -238,7 +240,6 @@ fun MetronomePanel(
                 }
                 IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
             }
-
             // tempo
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
                 FilledTonalIconButton(onClick = { setBpm(engine.bpm - 1) }) { Icon(Icons.Outlined.Remove, null) }

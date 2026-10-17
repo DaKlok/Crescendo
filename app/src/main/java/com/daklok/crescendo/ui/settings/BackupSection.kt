@@ -1,5 +1,6 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.outlined.Sync
 import com.daklok.crescendo.ui.common.RemoteAvatar
 import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.ui.common.OverlayKind
@@ -295,6 +296,22 @@ fun BackupSection(
                         onChange = { on ->
                             scope.launch { repo.update { it.copy(autoBackup = on) } }
                             BackupScheduler.setEnabled(context, on)
+                        },
+                    )
+                    SettingSwitchRow(
+                        icon = Icons.Outlined.Sync,
+                        title = stringResource(R.string.sync_title),
+                        subtitle = stringResource(R.string.sync_desc),
+                        checked = settings.syncEnabled,
+                        onChange = { on ->
+                            scope.launch {
+                                repo.update { it.copy(syncEnabled = on) }
+                                if (on) {
+                                    val app = context.applicationContext as CrescendoApp
+                                    com.daklok.crescendo.data.backup.SyncManager.checkRemote(app)
+                                    com.daklok.crescendo.data.backup.SyncManager.scheduleUploadIfChanged(app)
+                                }
+                            }
                         },
                     )
                 }

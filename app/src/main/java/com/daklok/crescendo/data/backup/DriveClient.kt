@@ -18,6 +18,9 @@ data class RemoteBackup(
     val id: String,
     val sizeBytes: Long,
     val modifiedAt: Long,
+    /** Ktoré zariadenie zálohu nahralo (pre synchronizáciu). */
+    val deviceId: String = "",
+    val deviceName: String = "",
 )
 
 /** Chyba 401 – prístupový token vypršal alebo bol odvolaný. */
@@ -56,15 +59,18 @@ class DriveClient(private val accessToken: String) {
         val q = URLEncoder.encode("name = '$BACKUP_NAME' and trashed = false", "UTF-8")
         val json = getJson(
             "$API/files?spaces=appDataFolder&q=$q" +
-                "&fields=files(id,size,modifiedTime)&orderBy=modifiedTime%20desc&pageSize=20"
+                "&fields=files(id,size,modifiedTime,appProperties)&orderBy=modifiedTime%20desc&pageSize=20"
         )
         val arr = json.optJSONArray("files") ?: return@withContext emptyList()
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val props = o.optJSONObject("appProperties")
             RemoteBackup(
                 id = o.getString("id"),
                 sizeBytes = o.optString("size", "0").toLongOrNull() ?: 0L,
                 modifiedAt = parseTime(o.optString("modifiedTime")),
+                deviceId = props?.optString("device", "") ?: "",
+                deviceName = props?.optString("deviceName", "") ?: "",
             )
         }
     }
@@ -73,7 +79,12 @@ class DriveClient(private val accessToken: String) {
      * Nahrá súbor ako novú zálohu (resumable upload, zvládne aj stovky MB).
      * Vráti ID nového súboru.
      */
-    suspend fun upload(file: File, onProgress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
+    suspend fun upload(
+        file: File,
+        deviceId: String = "",
+        deviceName: String = "",
+        onProgress: (Float) -> Unit,
+    ): String = withContext(Dispatchers.IO) {
         // 1) založenie relácie
         val init = open("$UPLOAD/files?uploadType=resumable&fields=id", "POST")
         init.doOutput = true
@@ -83,6 +94,7 @@ class DriveClient(private val accessToken: String) {
         val meta = JSONObject()
             .put("name", BACKUP_NAME)
             .put("parents", org.json.JSONArray().put("appDataFolder"))
+            .put("appProperties", JSONObject().put("device", deviceId).put("deviceName", deviceName))
             .toString()
             .toByteArray()
         init.outputStream.use { it.write(meta) }

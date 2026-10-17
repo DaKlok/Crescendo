@@ -76,6 +76,12 @@ data class AppSettings(
     val tapToTurn: Boolean = true,
     /** Tlačidlá hlasitosti otáčajú strany (inak menia hlasitosť ako zvyčajne). */
     val volumeKeysTurn: Boolean = false,
+    /** Polovičné otáčanie: najprv sa vymení horná polovica strany. */
+    val halfPageTurn: Boolean = false,
+    /** Orezať biele okraje strán. */
+    val cropMargins: Boolean = false,
+    /** Nočný režim nôt (invertované farby). */
+    val nightMode: Boolean = false,
 
     // Poznámky
     /** Kreslenie prstom (ak nemáš stylus). So stylusom sa kreslí vždy. */
@@ -107,6 +113,10 @@ data class AppSettings(
     val backupName: String = "",
     val backupPhoto: String = "",
     val autoBackup: Boolean = false,
+    /** Synchronizácia medzi zariadeniami cez Google Drive. */
+    val syncEnabled: Boolean = false,
+    /** Úvodný sprievodca už bol zobrazený. */
+    val onboardingDone: Boolean = false,
     /** Čas poslednej úspešnej zálohy (ms), 0 = ešte žiadna. */
     val lastBackupAt: Long = 0L,
 )
@@ -139,6 +149,9 @@ class SettingsRepository(private val context: Context) {
         val keepOn = booleanPreferencesKey("keep_on")
         val tap = booleanPreferencesKey("tap")
         val volumeKeys = booleanPreferencesKey("volume_keys")
+        val halfPage = booleanPreferencesKey("half_page")
+        val crop = booleanPreferencesKey("crop_margins")
+        val night = booleanPreferencesKey("night_mode")
         val finger = booleanPreferencesKey("finger")
         val toolbarPos = stringPreferencesKey("toolbar_pos")
         val haptics = booleanPreferencesKey("haptics")
@@ -154,6 +167,8 @@ class SettingsRepository(private val context: Context) {
         val backupName = stringPreferencesKey("backup_name")
         val backupPhoto = stringPreferencesKey("backup_photo")
         val autoBackup = booleanPreferencesKey("auto_backup")
+        val syncEnabled = booleanPreferencesKey("sync_enabled")
+        val onboardingDone = booleanPreferencesKey("onboarding_done")
         val lastBackupAt = longPreferencesKey("last_backup_at")
     }
 
@@ -185,6 +200,9 @@ class SettingsRepository(private val context: Context) {
             prefs[K.keepOn] = updated.keepScreenOn
             prefs[K.tap] = updated.tapToTurn
             prefs[K.volumeKeys] = updated.volumeKeysTurn
+            prefs[K.halfPage] = updated.halfPageTurn
+            prefs[K.crop] = updated.cropMargins
+            prefs[K.night] = updated.nightMode
             prefs[K.finger] = updated.fingerDrawing
             prefs[K.toolbarPos] = updated.toolbarPosition.name
             prefs[K.haptics] = updated.haptics
@@ -200,6 +218,8 @@ class SettingsRepository(private val context: Context) {
             prefs[K.backupName] = updated.backupName
             prefs[K.backupPhoto] = updated.backupPhoto
             prefs[K.autoBackup] = updated.autoBackup
+            prefs[K.syncEnabled] = updated.syncEnabled
+            prefs[K.onboardingDone] = updated.onboardingDone
             prefs[K.lastBackupAt] = updated.lastBackupAt
         }
     }
@@ -230,6 +250,9 @@ class SettingsRepository(private val context: Context) {
             keepScreenOn = this[K.keepOn] ?: d.keepScreenOn,
             tapToTurn = this[K.tap] ?: d.tapToTurn,
             volumeKeysTurn = this[K.volumeKeys] ?: d.volumeKeysTurn,
+            halfPageTurn = this[K.halfPage] ?: d.halfPageTurn,
+            cropMargins = this[K.crop] ?: d.cropMargins,
+            nightMode = this[K.night] ?: d.nightMode,
             fingerDrawing = this[K.finger] ?: d.fingerDrawing,
             toolbarPosition = enumOr(this[K.toolbarPos], d.toolbarPosition),
             haptics = this[K.haptics] ?: d.haptics,
@@ -245,6 +268,8 @@ class SettingsRepository(private val context: Context) {
             backupName = this[K.backupName] ?: d.backupName,
             backupPhoto = this[K.backupPhoto] ?: d.backupPhoto,
             autoBackup = this[K.autoBackup] ?: d.autoBackup,
+            syncEnabled = this[K.syncEnabled] ?: d.syncEnabled,
+            onboardingDone = this[K.onboardingDone] ?: d.onboardingDone,
             lastBackupAt = this[K.lastBackupAt] ?: d.lastBackupAt,
         )
     }

@@ -19,11 +19,14 @@ class CrescendoApp : Application() {
     }
 
     val database by lazy { AppDatabase.create(this) }
-    val library by lazy { LibraryRepository(this, database.pieceDao(), database.folderDao(), database.setlistDao()) }
+    val library by lazy { LibraryRepository(this, database.pieceDao(), database.folderDao(), database.setlistDao(), database.practiceDao()) }
     val setlists by lazy { SetlistRepository(database.setlistDao()) }
     val settings by lazy { SettingsRepository(this) }
     val annotations by lazy { AnnotationStore(this) }
     val backup by lazy { BackupManager(this) }
+    val practice by lazy { database.practiceDao() }
+    val pieceAudio by lazy { com.daklok.crescendo.data.PieceAudio(this) }
+    val catalog by lazy { com.daklok.crescendo.data.CatalogRepository(this) }
     /** Pedále klavíra cez MIDI (USB / Bluetooth). */
     val midi by lazy { com.daklok.crescendo.data.MidiPedals(this) }
 

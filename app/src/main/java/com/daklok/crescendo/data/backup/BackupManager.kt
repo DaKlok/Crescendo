@@ -51,7 +51,7 @@ class BackupManager(private val app: CrescendoApp) {
     private val mutex = Mutex()
 
     /** Priečinky v `filesDir`, ktoré patria do zálohy. */
-    private val folders = listOf("pdfs", "thumbs", "annotations", "datastore")
+    private val folders = listOf("pdfs", "thumbs", "annotations", "datastore", "audio", "recordings")
 
     /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk, tempá metronómu). */
     private val prefsNames = listOf("annotation_tools", "crescendo_language", "metronome")
@@ -114,12 +114,16 @@ class BackupManager(private val app: CrescendoApp) {
         try {
             val old = drive.listBackups()
             if (!quiet) _state.value = BackupState.Working(app.getString(R.string.bk_uploading), 0f)
-            drive.upload(zip) { p ->
+            drive.upload(zip, SyncState.deviceId(app), SyncState.deviceName()) { p ->
                 if (!quiet) _state.value = BackupState.Working(app.getString(R.string.bk_uploading), p)
             }
             // staré zálohy zmažeme až po úspešnom nahratí novej
             old.forEach { runCatching { drive.delete(it.id) } }
             app.settings.update { it.copy(lastBackupAt = System.currentTimeMillis()) }
+            // tento stav je teraz na Drive – pre synchronizáciu „zosúladené“ (čas podľa servera, nie hodín zariadenia)
+            val remoteAt = runCatching { drive.listBackups().firstOrNull()?.modifiedAt }.getOrNull()
+            // lokálny čas až po zápise lastBackupAt, inak by sa samotný zápis rátal ako zmena
+            SyncState.markSynced(app, remoteAt ?: System.currentTimeMillis())
             if (!quiet) _state.value = BackupState.Done(app.getString(R.string.bk_done))
         } finally {
             zip.delete()
@@ -144,6 +148,8 @@ class BackupManager(private val app: CrescendoApp) {
             app.database.close()
             extractArchive(zip)
             zip.delete()
+            // po obnove z Drive sú dáta zhodné so zálohou
+            SyncState.markSynced(app, remote.modifiedAt)
         }
         _state.value = BackupState.Done(app.getString(R.string.bk_restored))
         restartApp()

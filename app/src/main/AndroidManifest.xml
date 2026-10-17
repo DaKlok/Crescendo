@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- nahrávanie seba pri hraní a ladička -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- záloha na Google Drive -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -17,6 +19,9 @@
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
     <uses-feature
         android:name="android.software.midi"
         android:required="false" />
@@ -56,6 +61,15 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="application/pdf" />
+            </intent-filter>
+
+            <!-- Zdieľaná skladba z Crescenda (.crescendo = ZIP); iný ZIP import slušne odmietne -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
             </intent-filter>
         </activity>
 

@@ -33,6 +33,21 @@ interface PieceDao {
     @Query("UPDATE pieces SET folderId = :newFolder WHERE folderId = :oldFolder")
     suspend fun reparent(oldFolder: Long, newFolder: Long?)
 
+    @Query(
+        "UPDATE pieces SET title = :title, composer = :composer, keySignature = :key, " +
+            "instrument = :instrument, difficulty = :difficulty, tags = :tags WHERE id = :id"
+    )
+    suspend fun updateDetails(id: Long, title: String, composer: String, key: String, instrument: String, difficulty: Int, tags: String)
+
+    @Query("UPDATE pieces SET pageCount = :count WHERE id = :id")
+    suspend fun setPageCount(id: Long, count: Int)
+
+    @Query("UPDATE pieces SET lastPage = lastPage + :shift WHERE id = :id")
+    suspend fun shiftLastPage(id: Long, shift: Int)
+
+    @Query("UPDATE pieces SET thumbName = :thumb WHERE id = :id")
+    suspend fun setThumb(id: Long, thumb: String?)
+
     @Query("UPDATE pieces SET lastPage = :page, lastOpenedAt = :openedAt WHERE id = :id")
     suspend fun saveProgress(id: Long, page: Int, openedAt: Long)
 }

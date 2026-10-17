@@ -1,5 +1,16 @@
 package com.daklok.crescendo.ui.reader
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Piano
+import androidx.compose.material.icons.outlined.VerticalSplit
+import androidx.compose.material.icons.outlined.Crop
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DisplaySettings
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.MoreVert
 import com.daklok.crescendo.ui.common.isCompactWidth
@@ -168,11 +179,54 @@ private fun ReaderContent(
     // metronóm – tempo a takt sa pamätajú pre každú skladbu
     val metronome = remember { MetronomeEngine() }
     var metronomeOpen by remember { mutableStateOf(false) }
+    var audioOpen by remember { mutableStateOf(false) }
+    var tunerOpen by remember { mutableStateOf(false) }
+    // prehrávanie a nahrávanie žijú v čítačke, nie v paneli – zatvorenie panela ich nepreruší
+    val audioScope = rememberCoroutineScope()
+    val audioPlayer = remember { AudioPlayer(audioScope) }
+    val audioRecorder = remember { Recorder(context.applicationContext) }
+    DisposableEffect(Unit) {
+        onDispose {
+            audioRecorder.stop()
+            audioPlayer.release()
+        }
+    }
     val metronomePieceId = vm.state.collectAsStateWithLifecycle().value.piece?.id
     LaunchedEffect(metronomePieceId) {
         if (metronomePieceId != null) MetronomePrefs.load(context, metronomePieceId, metronome)
     }
     DisposableEffect(Unit) { onDispose { metronome.stop() } }
+
+    // Denník cvičenia: čas, keď je skladba otvorená a aplikácia v popredí (min. 30 s)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, metronomePieceId) {
+        val pid = metronomePieceId ?: return@DisposableEffect onDispose { }
+        val app = context.applicationContext as com.daklok.crescendo.CrescendoApp
+        val startedAt = System.currentTimeMillis()
+        var resumedAt = if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startedAt else 0L
+        var total = 0L
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> resumedAt = System.currentTimeMillis()
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> if (resumedAt > 0) {
+                    total += System.currentTimeMillis() - resumedAt
+                    resumedAt = 0L
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (resumedAt > 0) total += System.currentTimeMillis() - resumedAt
+            val sec = (total / 1000).toInt()
+            if (sec >= 30) {
+                app.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    app.practice.insert(com.daklok.crescendo.data.PracticeSessionEntity(pieceId = pid, startedAt = startedAt, durationSec = sec))
+                }
+            }
+        }
+    }
     val ui by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { runCatching { keyFocus.requestFocus() } }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -189,6 +243,7 @@ private fun ReaderContent(
     )
 
     var chromeVisible by remember { mutableStateOf(true) }
+    var halfTurned by remember { mutableStateOf(false) }
 
     // priblíženie (štipnutím) – platí pre aktuálnu stranu, pri zmene strany sa resetuje
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -217,6 +272,8 @@ private fun ReaderContent(
         if (on) {
             vm.annotations.enabled = false
             metronomeOpen = false
+            audioOpen = false
+            tunerOpen = false
             zoom = 1f
             pan = Offset.Zero
             stageHint = true
@@ -268,8 +325,17 @@ private fun ReaderContent(
         onDispose { controller?.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
+    // aktuálna hodnota aj pre gestá / pedále, ktoré si zapamätali starší next()
+    val halfTurnAllowed by androidx.compose.runtime.rememberUpdatedState(settings.halfPageTurn && !spread)
     fun next() = scope.launch {
-        if (pager.currentPage < screenCount - 1) {
+        val canHalf = halfTurnAllowed && zoom <= 1.01f
+        if (canHalf && !halfTurned && pager.currentPage < screenCount - 1) {
+            // polovičné otáčanie: najprv len horná polovica ďalšej strany
+            halfTurned = true
+        } else if (halfTurned) {
+            halfTurned = false
+            pager.scrollToPage((pager.currentPage + 1).coerceAtMost(screenCount - 1))
+        } else if (pager.currentPage < screenCount - 1) {
             pager.animateScrollToPage(pager.currentPage + 1)
         } else {
             // koniec skladby v setliste -> ďalšia skladba
@@ -279,7 +345,9 @@ private fun ReaderContent(
         }
     }
     fun previous() = scope.launch {
-        if (pager.currentPage > 0) {
+        if (halfTurned) {
+            halfTurned = false
+        } else if (pager.currentPage > 0) {
             pager.animateScrollToPage(pager.currentPage - 1)
         } else {
             val sl = setlist
@@ -329,7 +397,13 @@ private fun ReaderContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (immersive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHighest)
+            .background(
+                when {
+                    settings.nightMode -> Color(0xFF0E0E10)
+                    immersive -> MaterialTheme.colorScheme.surface
+                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                },
+            )
             // klávesnica a Bluetooth pedály (posielajú šípky / PageUp / PageDown)
             .focusRequester(keyFocus)
             .focusable()
@@ -404,16 +478,47 @@ private fun ReaderContent(
             ) {
                 val first = screen * perScreen
                 Box(Modifier.weight(1f).fillMaxSize()) {
-                    PageView(document, first, vm.annotations, settings.fingerDrawing, renderBoost = boost)
+                    PageView(
+                        document, first, vm.annotations, settings.fingerDrawing, renderBoost = boost,
+                        cropMargins = settings.cropMargins, night = settings.nightMode,
+                    )
+                    // Polovičné otáčanie: horná polovica už ukazuje ďalšiu stranu, dolná ešte túto
+                    if (!spread && isCurrent && halfTurned && !vm.annotations.enabled && first + 1 < pageCount) {
+                        val divider = MaterialTheme.colorScheme.primary
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .drawWithContent {
+                                    clipRect(bottom = size.height / 2f) { this@drawWithContent.drawContent() }
+                                    drawLine(
+                                        divider,
+                                        Offset(0f, size.height / 2f),
+                                        Offset(size.width, size.height / 2f),
+                                        strokeWidth = 3.dp.toPx(),
+                                    )
+                                },
+                        ) {
+                            PageView(
+                                document, first + 1, vm.annotations, settings.fingerDrawing,
+                                cropMargins = settings.cropMargins, night = settings.nightMode,
+                            )
+                        }
+                    }
                 }
                 if (spread) {
                     Box(Modifier.weight(1f).fillMaxSize()) {
-                        PageView(document, first + 1, vm.annotations, settings.fingerDrawing, renderBoost = boost)
+                        PageView(
+                            document, first + 1, vm.annotations, settings.fingerDrawing, renderBoost = boost,
+                            cropMargins = settings.cropMargins, night = settings.nightMode,
+                        )
                     }
                 }
             }
         }
         }
+
+        // pri ručnom prelistovaní sa polovičné otočenie zruší
+        LaunchedEffect(pager.currentPage) { halfTurned = false }
 
         val tbPos = settings.toolbarPosition
         val barTop = if (chromeVisible) 88.dp else 12.dp
@@ -518,7 +623,17 @@ private fun ReaderContent(
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.metronome)) },
                                     leadingIcon = { Icon(Icons.Outlined.Timer, null) },
-                                    onClick = { more = false; metronomeOpen = true },
+                                    onClick = { more = false; metronomeOpen = true; audioOpen = false; tunerOpen = false },
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.tuner)) },
+                                    leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) },
+                                    onClick = { more = false; tunerOpen = true; metronomeOpen = false; audioOpen = false },
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.audio_title)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Headphones, null) },
+                                    onClick = { more = false; audioOpen = true; metronomeOpen = false; tunerOpen = false },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.gesture_settings)) },
@@ -530,6 +645,7 @@ private fun ReaderContent(
                                     leadingIcon = { Icon(Icons.Outlined.IosShare, null) },
                                     onClick = { more = false; exportOpen = true },
                                 )
+                                DisplayToggles(settings) { t -> vm.update(t) }
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.fullscreen)) },
                                     leadingIcon = {
@@ -555,8 +671,36 @@ private fun ReaderContent(
                             icon = Icons.Outlined.Timer,
                             contentDescription = stringResource(R.string.metronome),
                             highlighted = metronome.playing || metronomeOpen,
-                            onClick = { metronomeOpen = !metronomeOpen },
+                            onClick = { metronomeOpen = !metronomeOpen; audioOpen = false; tunerOpen = false },
                         )
+                        TonalIconButton(
+                            icon = Icons.Outlined.GraphicEq,
+                            contentDescription = stringResource(R.string.tuner),
+                            highlighted = tunerOpen,
+                            onClick = { tunerOpen = !tunerOpen; metronomeOpen = false; audioOpen = false },
+                        )
+                        TonalIconButton(
+                            icon = Icons.Outlined.Headphones,
+                            contentDescription = stringResource(R.string.audio_title),
+                            highlighted = audioOpen,
+                            onClick = { audioOpen = !audioOpen; metronomeOpen = false; tunerOpen = false },
+                        )
+                        Box {
+                            var displayMenu by remember { mutableStateOf(false) }
+                            TonalIconButton(
+                                icon = Icons.Outlined.DisplaySettings,
+                                contentDescription = stringResource(R.string.display_options),
+                                highlighted = settings.nightMode || settings.cropMargins || settings.halfPageTurn,
+                                onClick = { displayMenu = true },
+                            )
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = displayMenu,
+                                onDismissRequest = { displayMenu = false },
+                                shape = RoundedCornerShape(16.dp),
+                            ) {
+                                DisplayToggles(settings) { t -> vm.update(t) }
+                            }
+                        }
                         TonalIconButton(
                             icon = Icons.Outlined.IosShare,
                             contentDescription = stringResource(R.string.export_pdf),
@@ -782,6 +926,91 @@ private fun ReaderContent(
             )
         }
 
+        // Ladička a akordy
+        AnimatedVisibility(
+            visible = tunerOpen,
+            modifier = Modifier
+                .align(if (tbPos == ToolbarPosition.LEFT && vm.annotations.enabled) Alignment.BottomEnd else Alignment.BottomStart)
+                .navigationBarsPadding()
+                .padding(bottom = barBottom + 8.dp, start = if (compact) 8.dp else 16.dp, end = if (compact) 8.dp else 16.dp),
+            enter = fadeIn() + slideInVertically(Motion.bouncy()) { it / 2 } + scaleIn(initialScale = 0.92f),
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it / 2 },
+        ) {
+            TunerPanel(onClose = { tunerOpen = false })
+        }
+
+        // Nahrávky (referenčná nahrávka + vlastné nahrávky)
+        AnimatedVisibility(
+            visible = audioOpen && metronomePieceId != null,
+            modifier = Modifier
+                .align(if (tbPos == ToolbarPosition.LEFT && vm.annotations.enabled) Alignment.BottomEnd else Alignment.BottomStart)
+                .navigationBarsPadding()
+                .padding(bottom = barBottom + 8.dp, start = if (compact) 8.dp else 16.dp, end = if (compact) 8.dp else 16.dp),
+            enter = fadeIn() + slideInVertically(Motion.bouncy()) { it / 2 } + scaleIn(initialScale = 0.92f),
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it / 2 },
+        ) {
+            metronomePieceId?.let { pid ->
+                AudioPanel(pieceId = pid, player = audioPlayer, recorder = audioRecorder, onClose = { audioOpen = false })
+            }
+        }
+
+        // Prebieha nahrávanie a panel je zatvorený – malý červený ukazovateľ (ťuk = zastaviť)
+        AnimatedVisibility(
+            visible = audioRecorder.recordingFile != null && !audioOpen,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = if (immersive) 16.dp else barTop + 8.dp, end = 16.dp),
+            enter = fadeIn() + scaleIn(Motion.bouncy()),
+            exit = fadeOut() + androidx.compose.animation.scaleOut(),
+        ) {
+            var now by remember { mutableStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    now = System.currentTimeMillis()
+                    kotlinx.coroutines.delay(500)
+                }
+            }
+            Surface(
+                onClick = { audioRecorder.stop() },
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                shadowElevation = 4.dp,
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .padding(end = 8.dp)
+                            .size(10.dp)
+                            .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape),
+                    )
+                    if (audioRecorder.midiMode) {
+                        // nahrávanie z klavíra – názov klavíra, alebo varovanie, že sa odpojil
+                        val pianos by (context.applicationContext as com.daklok.crescendo.CrescendoApp).midi.instruments
+                            .collectAsStateWithLifecycle()
+                        Icon(Icons.Outlined.Piano, null, Modifier.padding(end = 6.dp).size(18.dp))
+                        Text(
+                            pianos.firstOrNull()?.name ?: stringResource(R.string.rec_piano_lost),
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(end = 8.dp).widthIn(max = 160.dp),
+                        )
+                    }
+                    Text(
+                        "REC " + formatClock(now - audioRecorder.startedAt),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Icon(Icons.Outlined.Stop, stringResource(R.string.recording_stop), Modifier.padding(start = 8.dp).size(18.dp))
+                }
+            }
+        }
+
         // Koniec skladby v setliste – ďalšia skladba
         val nextEntry = setlist?.next
         AnimatedVisibility(
@@ -875,4 +1104,31 @@ private fun SetlistChip(setlist: SetlistNav, onSelect: (Int) -> Unit) {
             }
         }
     }
+}
+
+
+/** Prepínače zobrazenia nôt (v ponuke čítačky): nočný režim, orezanie okrajov, polovičné otáčanie. */
+@Composable
+private fun DisplayToggles(
+    settings: com.daklok.crescendo.data.AppSettings,
+    update: ((com.daklok.crescendo.data.AppSettings) -> com.daklok.crescendo.data.AppSettings) -> Unit,
+) {
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(stringResource(R.string.night_mode)) },
+        leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
+        trailingIcon = { androidx.compose.material3.Switch(checked = settings.nightMode, onCheckedChange = null) },
+        onClick = { update { it.copy(nightMode = !it.nightMode) } },
+    )
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(stringResource(R.string.crop_margins)) },
+        leadingIcon = { Icon(Icons.Outlined.Crop, null) },
+        trailingIcon = { androidx.compose.material3.Switch(checked = settings.cropMargins, onCheckedChange = null) },
+        onClick = { update { it.copy(cropMargins = !it.cropMargins) } },
+    )
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(stringResource(R.string.half_page_turn)) },
+        leadingIcon = { Icon(Icons.Outlined.VerticalSplit, null) },
+        trailingIcon = { androidx.compose.material3.Switch(checked = settings.halfPageTurn, onCheckedChange = null) },
+        onClick = { update { it.copy(halfPageTurn = !it.halfPageTurn) } },
+    )
 }

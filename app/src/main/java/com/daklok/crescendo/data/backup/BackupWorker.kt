@@ -16,6 +16,9 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val manager = applicationContext.backupManager
         // na pozadí sa nedá zobraziť prihlásenie – ak treba, záloha sa jednoducho preskočí
         val token = manager.silentToken() ?: return Result.success()
+        // pri synchronizácii neprepíšeme novší stav z iného zariadenia – rozhodne používateľ
+        val app = applicationContext as com.daklok.crescendo.CrescendoApp
+        if (SyncManager.enabled(app) && SyncManager.otherDeviceNewer(app, token)) return Result.success()
         val ok = manager.backup(token, quiet = true)
         return if (ok) Result.success() else Result.retry()
     }

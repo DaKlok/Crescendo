@@ -8,12 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PieceEntity::class, FolderEntity::class, SetlistEntity::class, SetlistItemEntity::class],
-    version = 4, exportSchema = true)
+    entities = [PieceEntity::class, FolderEntity::class, SetlistEntity::class, SetlistItemEntity::class, PracticeSessionEntity::class],
+    version = 5, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pieceDao(): PieceDao
     abstract fun folderDao(): FolderDao
     abstract fun setlistDao(): SetlistDao
+    abstract fun practiceDao(): PracticeDao
 
     companion object {
         /** v1 -> v2: priečinky. Existujúce skladby zostanú v knižnici (folderId = null). */
@@ -57,9 +58,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 -> v5: údaje o skladbe (skladateľ, tónina, nástroj, obtiažnosť, štítky) + denník cvičenia. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `pieces` ADD COLUMN `composer` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `pieces` ADD COLUMN `keySignature` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `pieces` ADD COLUMN `instrument` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `pieces` ADD COLUMN `difficulty` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `pieces` ADD COLUMN `tags` TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `practice_sessions` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`pieceId` INTEGER NOT NULL, " +
+                        "`startedAt` INTEGER NOT NULL, " +
+                        "`durationSec` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_practice_sessions_pieceId` ON `practice_sessions` (`pieceId`)")
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "crescendo.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

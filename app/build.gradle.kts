@@ -32,6 +32,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // vzorky klavíra (OGG) sa čítajú priamo z APK – nesmú byť skomprimované
+    androidResources {
+        noCompress += "ogg"
+    }
     buildFeatures {
         compose = true
     }
@@ -76,6 +80,8 @@ dependencies {
     implementation(libs.mlkit.face.detection)
     // skenovanie nôt fotoaparátom (orezanie, vyrovnanie, PDF)
     implementation(libs.mlkit.document.scanner)
+    // spájanie PDF (doplnenie strán do existujúcich nôt) bez straty kvality
+    implementation(libs.pdfbox.android)
 
     // Záloha na Google Drive
     implementation(libs.play.services.auth)

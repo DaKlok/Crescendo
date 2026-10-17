@@ -154,6 +154,20 @@ class AnnotationStore(private val context: Context) {
         }
     }
 
+    /** Posunie všetky poznámky o [shift] strán (po vložení strán na začiatok). */
+    suspend fun shiftPages(pieceId: Long, shift: Int) {
+        if (shift == 0) return
+        val notes = load(pieceId)
+        if (notes.pages.isEmpty() && notes.stamps.isEmpty()) return
+        save(
+            pieceId,
+            PieceNotes(
+                pages = notes.pages.mapKeys { it.key + shift },
+                stamps = notes.stamps.mapKeys { it.key + shift },
+            ),
+        )
+    }
+
     fun delete(pieceId: Long) {
         file(pieceId).delete()
     }

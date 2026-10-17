@@ -1,5 +1,10 @@
 package com.daklok.crescendo.ui.library
 
+import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.SmallFloatingActionButton
@@ -132,6 +137,8 @@ fun LibraryScreen(
     onOpenPiece: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSetlists: () -> Unit = {},
+    onOpenPractice: () -> Unit = {},
+    onOpenCatalog: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val haptic = rememberHaptic()
@@ -173,17 +180,40 @@ fun LibraryScreen(
     }
     val launchImport = {
         haptic(HapticFeedbackType.LongPress)
-        picker.launch(arrayOf("application/pdf"))
+        // PDF alebo zdieľaná skladba z Crescenda (.crescendo = ZIP)
+        picker.launch(arrayOf("application/pdf", "application/zip", "application/octet-stream"))
     }
 
-    // skenovanie fotoaparátom -> PDF -> dialóg s názvom -> import
+    // doplnenie strán do existujúcej skladby (súbor alebo sken)
+    var appendTarget by remember { mutableStateOf<PieceEntity?>(null) }
+    var editingDetails by remember { mutableStateOf<PieceEntity?>(null) }
+    var editingPages by remember { mutableStateOf<PieceEntity?>(null) }
+    var splitting by remember { mutableStateOf<PieceEntity?>(null) }
+    var pendingAppend by remember { mutableStateOf<Pair<PieceEntity, Boolean>?>(null) }
+    val appendPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val p = pendingAppend
+        if (uri != null && p != null) vm.appendToPiece(p.first, uri, p.second)
+        pendingAppend = null
+    }
+
+    // skenovanie fotoaparátom -> PDF -> dialóg s názvom -> import (alebo doplnenie strán)
     var scannedPdf by remember { mutableStateOf<android.net.Uri?>(null) }
     val startScan = rememberDocumentScanner(
-        onScanned = { uri, _ -> scannedPdf = uri },
+        onScanned = { uri, _ ->
+            val p = pendingAppend
+            if (p != null) {
+                vm.appendToPiece(p.first, uri, p.second)
+                pendingAppend = null
+            } else {
+                scannedPdf = uri
+            }
+        },
         onError = { android.widget.Toast.makeText(context, R.string.scan_failed, android.widget.Toast.LENGTH_LONG).show() },
     )
     val launchScan = {
         haptic(HapticFeedbackType.LongPress)
+        // nový sken (nie doplnenie) – zrušíme prípadné nedokončené doplnenie
+        pendingAppend = null
         startScan()
     }
 
@@ -275,6 +305,16 @@ fun LibraryScreen(
                                             onClick = { compactMenuOpen = false; onOpenSetlists() },
                                         )
                                         DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.catalog)) },
+                                            leadingIcon = { Icon(Icons.Outlined.TravelExplore, null) },
+                                            onClick = { compactMenuOpen = false; onOpenCatalog() },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.practice)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Insights, null) },
+                                            onClick = { compactMenuOpen = false; onOpenPractice() },
+                                        )
+                                        DropdownMenuItem(
                                             text = { Text(stringResource(R.string.new_folder)) },
                                             leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
                                             onClick = { compactMenuOpen = false; newFolderOpen = true },
@@ -318,6 +358,18 @@ fun LibraryScreen(
                                         searchOpen = !searchOpen
                                         if (!searchOpen) vm.setQuery("")
                                     },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.TravelExplore,
+                                    contentDescription = stringResource(R.string.catalog),
+                                    onClick = onOpenCatalog,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.Insights,
+                                    contentDescription = stringResource(R.string.practice),
+                                    onClick = onOpenPractice,
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 TonalIconButton(
@@ -474,6 +526,10 @@ fun LibraryScreen(
                             selection = selection,
                             onColorFolder = { coloringFolder = it },
                             onAddToSetlist = { piece -> addingToSetlist = listOf(piece.id) },
+                            onAppend = { piece -> appendTarget = piece },
+                            onEditDetails = { piece -> editingDetails = piece },
+                            onEditPages = { piece -> editingPages = piece },
+                            onSplit = { piece -> splitting = piece },
                             onExport = { piece ->
                                 exporting = ExportRequest(
                                     title = piece.title,
@@ -545,6 +601,61 @@ fun LibraryScreen(
                 }) { Text(stringResource(R.string.remove_folder)) }
             },
             dismissButton = { TextButton(onClick = { deletingFolder = null }) { Text(stringResource(R.string.back)) } },
+        )
+    }
+
+    editingPages?.let { piece ->
+        PageEditorDialog(
+            piece = piece,
+            pdf = vm.pdfFile(piece),
+            onSave = { pages ->
+                haptic(HapticFeedbackType.LongPress)
+                vm.editPages(piece, pages)
+                editingPages = null
+            },
+            onDismiss = { editingPages = null },
+        )
+    }
+
+    splitting?.let { piece ->
+        SplitDialog(
+            piece = piece,
+            onSplit = { parts, keep ->
+                haptic(HapticFeedbackType.LongPress)
+                vm.splitPiece(piece, parts, keep)
+                splitting = null
+            },
+            onDismiss = { splitting = null },
+        )
+    }
+
+    editingDetails?.let { piece ->
+        PieceDetailsDialog(
+            piece = piece,
+            allTags = state.allTags,
+            onSave = {
+                haptic(HapticFeedbackType.LongPress)
+                vm.updateDetails(it)
+                editingDetails = null
+            },
+            onDismiss = { editingDetails = null },
+        )
+    }
+
+    appendTarget?.let { piece ->
+        AppendPagesDialog(
+            piece = piece,
+            onPickFile = { atStart ->
+                pendingAppend = piece to atStart
+                appendTarget = null
+                appendPicker.launch(arrayOf("application/pdf"))
+            },
+            onScan = { atStart ->
+                pendingAppend = piece to atStart
+                appendTarget = null
+                startScan()
+            },
+            onDismiss = { appendTarget = null },
         )
     }
 
@@ -692,6 +803,10 @@ private fun LibraryGrid(
     selection: Selection,
     onColorFolder: (FolderEntity) -> Unit,
     onAddToSetlist: (PieceEntity) -> Unit,
+    onAppend: (PieceEntity) -> Unit,
+    onEditDetails: (PieceEntity) -> Unit,
+    onEditPages: (PieceEntity) -> Unit,
+    onSplit: (PieceEntity) -> Unit,
     onExport: (PieceEntity) -> Unit,
     onOpenPiece: (Long) -> Unit,
     onImport: () -> Unit,
@@ -744,18 +859,21 @@ private fun LibraryGrid(
         if (s.totalCount > 0) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "filters") {
                 Row(
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier
+                        .animateItem()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     FilterChip(
-                        selected = !s.favoritesOnly,
+                        selected = !s.favoritesOnly && s.tagFilter == null,
                         onClick = {
                             haptic(HapticFeedbackType.TextHandleMove)
                             vm.setFavoritesOnly(false)
+                            vm.setTagFilter(null)
                         },
                         label = { Text(if (current != null) stringResource(R.string.this_folder) else stringResource(R.string.all_count, s.totalCount)) },
                         shape = RoundedCornerShape(12.dp),
-                        leadingIcon = if (!s.favoritesOnly) {
+                        leadingIcon = if (!s.favoritesOnly && s.tagFilter == null) {
                             { Icon(Icons.Outlined.Check, null, Modifier.size(FilterChipDefaults.IconSize)) }
                         } else null,
                     )
@@ -775,6 +893,25 @@ private fun LibraryGrid(
                             )
                         },
                     )
+                    // štítky skladieb
+                    s.allTags.forEach { tag ->
+                        FilterChip(
+                            selected = s.tagFilter == tag,
+                            onClick = {
+                                haptic(HapticFeedbackType.TextHandleMove)
+                                vm.setTagFilter(if (s.tagFilter == tag) null else tag)
+                            },
+                            label = { Text(tag) },
+                            shape = RoundedCornerShape(12.dp),
+                            leadingIcon = {
+                                Icon(
+                                    if (s.tagFilter == tag) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Label,
+                                    null,
+                                    Modifier.size(FilterChipDefaults.IconSize),
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -840,6 +977,11 @@ private fun LibraryGrid(
                     onMove = { onMove(MoveTarget.Piece(piece)) },
                     onExport = { onExport(piece) },
                     onAddToSetlist = { onAddToSetlist(piece) },
+                    onAppend = { onAppend(piece) },
+                    onEditDetails = { onEditDetails(piece) },
+                    onEditPages = { onEditPages(piece) },
+                    onSplit = { onSplit(piece) },
+                    onShare = { vm.sharePiece(piece) },
                     modifier = Modifier.animateItem(),
                     selectionMode = selection.active,
                     selected = piece.id in selection.pieces,

@@ -1,5 +1,9 @@
 package com.daklok.crescendo.ui.library
 
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.CallSplit
+import androidx.compose.material.icons.outlined.AutoAwesomeMosaic
+import androidx.compose.material.icons.outlined.PostAdd
 import com.daklok.crescendo.ui.common.isCompactWidth
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.IosShare
@@ -171,6 +175,11 @@ fun PieceCard(
     onMove: () -> Unit,
     onExport: () -> Unit,
     onAddToSetlist: () -> Unit,
+    onAppend: () -> Unit,
+    onEditDetails: () -> Unit,
+    onEditPages: () -> Unit,
+    onSplit: () -> Unit,
+    onShare: () -> Unit,
     modifier: Modifier = Modifier,
     selectionMode: Boolean = false,
     selected: Boolean = false,
@@ -262,9 +271,9 @@ fun PieceCard(
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.rename)) },
+                        text = { Text(stringResource(R.string.edit_details)) },
                         leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                        onClick = { menuOpen = false; renameOpen = true },
+                        onClick = { menuOpen = false; onEditDetails() },
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.move_to_folder)) },
@@ -272,9 +281,31 @@ fun PieceCard(
                         onClick = { menuOpen = false; onMove() },
                     )
                     DropdownMenuItem(
+                        text = { Text(stringResource(R.string.append_pages)) },
+                        leadingIcon = { Icon(Icons.Outlined.PostAdd, null) },
+                        onClick = { menuOpen = false; onAppend() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.edit_pages)) },
+                        leadingIcon = { Icon(Icons.Outlined.AutoAwesomeMosaic, null) },
+                        onClick = { menuOpen = false; onEditPages() },
+                    )
+                    if (piece.pageCount > 1) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.split_piece)) },
+                            leadingIcon = { Icon(Icons.Outlined.CallSplit, null) },
+                            onClick = { menuOpen = false; onSplit() },
+                        )
+                    }
+                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.add_to_setlist)) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) },
                         onClick = { menuOpen = false; onAddToSetlist() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.share_piece)) },
+                        leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                        onClick = { menuOpen = false; onShare() },
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.export_pdf)) },
@@ -297,6 +328,15 @@ fun PieceCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (piece.composer.isNotBlank()) {
+                Text(
+                    piece.composer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(2.dp))
             val progress = progressOf(piece)
             Text(

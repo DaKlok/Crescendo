@@ -20,4 +20,14 @@ data class PieceEntity(
     val lastOpenedAt: Long = 0L,
     /** Priečinok, v ktorom skladba je (null = priamo v knižnici). */
     val folderId: Long? = null,
-)
+    // Údaje o skladbe (v5)
+    val composer: String = "",
+    val keySignature: String = "",
+    val instrument: String = "",
+    /** Obtiažnosť 0–5 (0 = neuvedená). */
+    val difficulty: Int = 0,
+    /** Štítky oddelené čiarkou. */
+    val tags: String = "",
+) {
+    val tagList: List<String> get() = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+}

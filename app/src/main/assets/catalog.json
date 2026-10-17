@@ -1,0 +1,160 @@
+{
+ "version": 1,
+ "source": "Mutopia Project",
+ "sourceUrl": "https://www.mutopiaproject.org",
+ "items": [
+  {
+   "id": "fur_Elise_WoO59",
+   "title": "Für Elise",
+   "titleSk": "Für Elise",
+   "composer": "L. van Beethoven",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/BeethovenLv/WoO59/fur_Elise_WoO59/fur_Elise_WoO59-a4.pdf"
+  },
+  {
+   "id": "moonlight",
+   "title": "Moonlight Sonata, Op. 27 No. 2",
+   "titleSk": "Mesačná sonáta, op. 27 č. 2",
+   "composer": "L. van Beethoven",
+   "instrument": "Piano",
+   "difficulty": 4,
+   "url": "https://www.mutopiaproject.org/ftp/BeethovenLv/O27/moonlight/moonlight-a4.pdf"
+  },
+  {
+   "id": "pathetique-2",
+   "title": "Pathétique Sonata – 2nd movement",
+   "titleSk": "Patetická sonáta – 2. časť",
+   "composer": "L. van Beethoven",
+   "instrument": "Piano",
+   "difficulty": 3,
+   "url": "https://www.mutopiaproject.org/ftp/BeethovenLv/O13/pathetique-2/pathetique-2-a4.pdf"
+  },
+  {
+   "id": "ode",
+   "title": "Ode to Joy",
+   "titleSk": "Óda na radosť",
+   "composer": "L. van Beethoven",
+   "instrument": "Piano",
+   "difficulty": 1,
+   "url": "https://www.mutopiaproject.org/ftp/BeethovenLv/ode/ode-a4.pdf"
+  },
+  {
+   "id": "wtk1-prelude1",
+   "title": "Prelude in C major, BWV 846",
+   "titleSk": "Prelúdium C dur, BWV 846",
+   "composer": "J. S. Bach",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/BachJS/BWV846/wtk1-prelude1/wtk1-prelude1-a4.pdf"
+  },
+  {
+   "id": "anna-magdalena-04",
+   "title": "Minuet in G major, BWV Anh. 114",
+   "titleSk": "Menuet G dur, BWV Anh. 114",
+   "composer": "J. S. Bach",
+   "instrument": "Piano",
+   "difficulty": 1,
+   "url": "https://www.mutopiaproject.org/ftp/BachJS/BWVAnh114/anna-magdalena-04/anna-magdalena-04-a4.pdf"
+  },
+  {
+   "id": "bach-invention-01",
+   "title": "Invention No. 1, BWV 772",
+   "titleSk": "Invencia č. 1, BWV 772",
+   "composer": "J. S. Bach",
+   "instrument": "Piano",
+   "difficulty": 3,
+   "url": "https://www.mutopiaproject.org/ftp/BachJS/BWV772/bach-invention-01/bach-invention-01-a4.pdf"
+  },
+  {
+   "id": "KV331_3_RondoAllaTurca",
+   "title": "Rondo alla turca, K. 331",
+   "titleSk": "Rondo alla turca, KV 331",
+   "composer": "W. A. Mozart",
+   "instrument": "Piano",
+   "difficulty": 3,
+   "url": "https://www.mutopiaproject.org/ftp/MozartWA/KV331/KV331_3_RondoAllaTurca/KV331_3_RondoAllaTurca-a4.pdf"
+  },
+  {
+   "id": "K545-1",
+   "title": "Sonata facile, K. 545 – 1st movement",
+   "titleSk": "Sonata facile, KV 545 – 1. časť",
+   "composer": "W. A. Mozart",
+   "instrument": "Piano",
+   "difficulty": 3,
+   "url": "https://www.mutopiaproject.org/ftp/MozartWA/KV545/K545-1/K545-1-a4.pdf"
+  },
+  {
+   "id": "chopin_nocturne_op9_n2",
+   "title": "Nocturne Op. 9 No. 2",
+   "titleSk": "Nokturno op. 9 č. 2",
+   "composer": "F. Chopin",
+   "instrument": "Piano",
+   "difficulty": 4,
+   "url": "https://www.mutopiaproject.org/ftp/ChopinFF/O9/chopin_nocturne_op9_n2/chopin_nocturne_op9_n2-a4.pdf"
+  },
+  {
+   "id": "Chop-28-4",
+   "title": "Prelude in E minor, Op. 28 No. 4",
+   "titleSk": "Prelúdium e mol, op. 28 č. 4",
+   "composer": "F. Chopin",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/ChopinFF/O28/Chop-28-4/Chop-28-4-a4.pdf"
+  },
+  {
+   "id": "chopin_valse_op64_no1",
+   "title": "Minute Waltz, Op. 64 No. 1",
+   "titleSk": "Minútový valčík, op. 64 č. 1",
+   "composer": "F. Chopin",
+   "instrument": "Piano",
+   "difficulty": 4,
+   "url": "https://www.mutopiaproject.org/ftp/ChopinFF/O64/chopin_valse_op64_no1/chopin_valse_op64_no1-a4.pdf"
+  },
+  {
+   "id": "gymnopedie_1",
+   "title": "Gymnopédie No. 1",
+   "titleSk": "Gymnopédie č. 1",
+   "composer": "E. Satie",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/SatieE/gymnopedie_1/gymnopedie_1-a4.pdf"
+  },
+  {
+   "id": "no_1",
+   "title": "Gnossienne No. 1",
+   "titleSk": "Gnossienne č. 1",
+   "composer": "E. Satie",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/SatieE/Gnossienne/no_1/no_1-a4.pdf"
+  },
+  {
+   "id": "SchumannOp15No07",
+   "title": "Träumerei, Op. 15 No. 7",
+   "titleSk": "Snívanie (Träumerei), op. 15 č. 7",
+   "composer": "R. Schumann",
+   "instrument": "Piano",
+   "difficulty": 3,
+   "url": "https://www.mutopiaproject.org/ftp/SchumannR/O15/SchumannOp15No07/SchumannOp15No07-a4.pdf"
+  },
+  {
+   "id": "schumann-op68-08-cavalier-sauvage",
+   "title": "The Wild Horseman, Op. 68 No. 8",
+   "titleSk": "Divoký jazdec, op. 68 č. 8",
+   "composer": "R. Schumann",
+   "instrument": "Piano",
+   "difficulty": 1,
+   "url": "https://www.mutopiaproject.org/ftp/SchumannR/O68/schumann-op68-08-cavalier-sauvage/schumann-op68-08-cavalier-sauvage-a4.pdf"
+  },
+  {
+   "id": "CanonInD",
+   "title": "Canon in D",
+   "titleSk": "Kánon D dur",
+   "composer": "J. Pachelbel",
+   "instrument": "Piano",
+   "difficulty": 2,
+   "url": "https://www.mutopiaproject.org/ftp/PachelbelJ/CanonInD/CanonInD-a4.pdf"
+  }
+ ]
+}

@@ -41,7 +41,7 @@ object PdfExporter {
         val doc = AndroidPdfDocument()
         try {
             ParcelFileDescriptor.open(source, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-                val renderer = PdfRenderer(fd)
+                val renderer = openPdfRenderer(fd)
                 try {
                     val count = renderer.pageCount
                     // dlhé skladby v nižšom rozlíšení, aby export nezahltil pamäť
@@ -84,7 +84,7 @@ object PdfExporter {
                         onProgress((i + 1f) / count)
                     }
                 } finally {
-                    renderer.close()
+                    renderer.closeLocked()
                 }
             }
             doc.writeTo(out)

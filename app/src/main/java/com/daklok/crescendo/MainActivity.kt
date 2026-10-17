@@ -1,5 +1,14 @@
 package com.daklok.crescendo
 
+import com.daklok.crescendo.ui.catalog.CatalogScreen
+import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.CloudSync
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import com.daklok.crescendo.ui.onboarding.OnboardingScreen
+import com.daklok.crescendo.data.backup.SyncPrompt
+import com.daklok.crescendo.data.backup.SyncManager
+import com.daklok.crescendo.ui.stats.PracticeScreen
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInHorizontally
 import com.daklok.crescendo.ui.setlist.SetlistsScreen
@@ -62,6 +71,8 @@ private sealed interface Route {
         val setlistIndex: Int = 0,
     ) : Route
     data object Setlists : Route
+    data object Practice : Route
+    data object Catalog : Route
 }
 
 class MainActivity : ComponentActivity() {
@@ -104,11 +115,35 @@ class MainActivity : ComponentActivity() {
                         CrescendoNav(app = app, libraryVm = libraryVm, openRequest = pendingOpen.value) {
                             pendingOpen.value = null
                         }
+                        // úvodný sprievodca (len pri prvom spustení; čakáme na skutočné nastavenia, nech nebliká)
+                        val loaded by remember { app.settings.settings.map<AppSettings, AppSettings?> { it } }
+                            .collectAsStateWithLifecycle(initialValue = null)
+                        val current = loaded
+                        if (current != null && !current.onboardingDone) {
+                            OnboardingScreen(onDone = {
+                                app.appScope.launch { app.settings.update { it.copy(onboardingDone = true) } }
+                            })
+                        }
+                        SyncPromptHost(app)
                         AppOverlayHost()
                     }
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // synchronizácia: má iné zariadenie novší stav?
+        val app = application as CrescendoApp
+        app.appScope.launch { runCatching { SyncManager.checkRemote(app) } }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // synchronizácia: nahrať zmeny, keď bude internet
+        val app = application as CrescendoApp
+        if (!isChangingConfigurations) app.appScope.launch { runCatching { SyncManager.scheduleUploadIfChanged(app) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -150,7 +185,10 @@ private fun CrescendoNav(
                 val dir = if (to.setlistIndex >= from.setlistIndex) 1 else -1
                 (fadeIn(tween(260)) + slideInHorizontally(Motion.gentle()) { dir * it / 3 }) togetherWith
                     (fadeOut(tween(200)) + slideOutHorizontally(tween(260)) { -dir * it / 4 })
-            } else if (targetState is Route.Reader || targetState is Route.Setlists && initialState is Route.Library) {
+            } else if (targetState is Route.Reader ||
+                (targetState is Route.Setlists || targetState is Route.Practice || targetState is Route.Catalog) &&
+                    initialState is Route.Library
+            ) {
                 // otvorenie skladby: čítačka pružne „vyrastie“, knižnica ustúpi do pozadia
                 (fadeIn(tween(260)) + scaleIn(initialScale = 0.92f, animationSpec = Motion.gentle())) togetherWith
                     (fadeOut(tween(200)) + scaleOut(targetScale = 1.04f, animationSpec = tween(260)))
@@ -168,7 +206,14 @@ private fun CrescendoNav(
                 onOpenPiece = { route = Route.Reader(it) },
                 onOpenSettings = { showSettings = true },
                 onOpenSetlists = { route = Route.Setlists },
+                onOpenPractice = { route = Route.Practice },
+                onOpenCatalog = { route = Route.Catalog },
             )
+            Route.Catalog -> CatalogScreen(
+                onBack = { route = Route.Library },
+                onOpenPiece = { route = Route.Reader(it) },
+            )
+            Route.Practice -> PracticeScreen(onBack = { route = Route.Library })
             Route.Setlists -> {
                 val vm: SetlistViewModel = viewModel(
                     key = "setlists",
@@ -220,4 +265,65 @@ private fun CrescendoNav(
     if (showSettings && AppOverlay.kind == null) {
         SettingsSheet(repo = app.settings, backup = app.backup, onDismiss = { showSettings = false })
     }
+}
+
+
+/** Otázka synchronizácie: načítať novší stav z iného zariadenia / ponechať tento. */
+@Composable
+private fun SyncPromptHost(app: CrescendoApp) {
+    val prompt by SyncManager.prompt.collectAsStateWithLifecycle()
+    val p = prompt ?: return
+    if (AppOverlay.kind != null) return
+    val (device, at) = when (p) {
+        is SyncPrompt.RemoteNewer -> p.deviceName to p.at
+        is SyncPrompt.Conflict -> p.deviceName to p.at
+    }
+    val time = remember(at) {
+        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(at))
+    }
+    val conflict = p is SyncPrompt.Conflict
+    fun loadRemote() {
+        SyncManager.clearPrompt()
+        app.appScope.launch {
+            val token = app.backup.silentToken() ?: return@launch
+            AppOverlay.show(OverlayKind.RESTORE)
+            if (!app.backup.restore(token)) AppOverlay.hide()
+        }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { SyncManager.later(app) },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.CloudSync, null) },
+        title = {
+            androidx.compose.material3.Text(
+                androidx.compose.ui.res.stringResource(if (conflict) R.string.sync_conflict_title else R.string.sync_newer_title),
+            )
+        },
+        text = {
+            androidx.compose.material3.Text(
+                androidx.compose.ui.res.stringResource(
+                    if (conflict) R.string.sync_conflict_text else R.string.sync_newer_text,
+                    device,
+                    time,
+                ),
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { loadRemote() }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_load, device))
+            }
+        },
+        dismissButton = {
+            androidx.compose.foundation.layout.Row {
+                if (conflict) {
+                    androidx.compose.material3.TextButton(onClick = { app.appScope.launch { SyncManager.keepLocal(app) } }) {
+                        androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_keep_local))
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = { SyncManager.later(app) }) {
+                    androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.sync_later))
+                }
+            }
+        },
+    )
 }

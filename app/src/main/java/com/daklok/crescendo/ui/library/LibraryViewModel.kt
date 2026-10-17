@@ -38,6 +38,9 @@ data class LibraryUiState(
     val continueReading: PieceEntity? = null,
     val query: String = "",
     val favoritesOnly: Boolean = false,
+    /** Všetky štítky v knižnici a vybraný štítok (filter). */
+    val allTags: List<String> = emptyList(),
+    val tagFilter: String? = null,
     /** Pri hľadaní / filtri obľúbených sa prehľadáva celá knižnica a priečinky sa skryjú. */
     val globalView: Boolean = false,
     val sort: LibrarySort = LibrarySort.RECENT,
@@ -59,6 +62,7 @@ private data class Filters(
     val favoritesOnly: Boolean,
     val importing: Int,
     val folderId: Long?,
+    val tag: String?,
 )
 
 class LibraryViewModel(
@@ -71,6 +75,7 @@ class LibraryViewModel(
     private val favoritesOnly = MutableStateFlow(false)
     private val importing = MutableStateFlow(0)
     private val currentFolderId = MutableStateFlow<Long?>(null)
+    private val tagFilter = MutableStateFlow<String?>(null)
 
     private val _selection = MutableStateFlow(Selection())
     val selection: StateFlow<Selection> = _selection
@@ -102,8 +107,8 @@ class LibraryViewModel(
     val settings: StateFlow<AppSettings> = settingsRepo.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    private val filters = combine(query, favoritesOnly, importing, currentFolderId) { q, f, i, folder ->
-        Filters(q, f, i, folder)
+    private val filters = combine(query, favoritesOnly, importing, currentFolderId, tagFilter) { q, f, i, folder, tag ->
+        Filters(q, f, i, folder, tag)
     }
 
     val state: StateFlow<LibraryUiState> = combine(
@@ -117,12 +122,18 @@ class LibraryViewModel(
         val current = f.folderId?.let { byId[it] }
         val currentId = current?.id
 
-        val global = f.query.isNotBlank() || f.favoritesOnly
+        val global = f.query.isNotBlank() || f.favoritesOnly || f.tag != null
+        val q = f.query.trim()
         val filtered = all
             .asSequence()
             .filter { global || it.folderId == currentId }
             .filter { !f.favoritesOnly || it.favorite }
-            .filter { f.query.isBlank() || it.title.contains(f.query.trim(), ignoreCase = true) }
+            .filter { f.tag == null || f.tag in it.tagList }
+            .filter {
+                // hľadá sa v názve, skladateľovi, nástroji, tónine aj štítkoch
+                q.isEmpty() || it.title.contains(q, true) || it.composer.contains(q, true) ||
+                    it.instrument.contains(q, true) || it.keySignature.contains(q, true) || it.tags.contains(q, true)
+            }
             .toList()
         val sorted = when (settings.sort) {
             LibrarySort.RECENT -> filtered.sortedByDescending { maxOf(it.lastOpenedAt, it.addedAt) }
@@ -156,6 +167,8 @@ class LibraryViewModel(
             } else null,
             query = f.query,
             favoritesOnly = f.favoritesOnly,
+            allTags = all.flatMap { it.tagList }.distinct().sortedBy { it.lowercase() },
+            tagFilter = f.tag,
             globalView = global,
             sort = settings.sort,
             importing = f.importing > 0,
@@ -181,6 +194,16 @@ class LibraryViewModel(
     fun setQuery(q: String) {
         clearSelection()
         query.update { q }
+    }
+
+    fun setTagFilter(tag: String?) {
+        clearSelection()
+        tagFilter.update { tag }
+    }
+
+    fun updateDetails(piece: PieceEntity) {
+        if (piece.title.isBlank()) return
+        viewModelScope.launch { library.updateDetails(piece) }
     }
 
     fun setFavoritesOnly(value: Boolean) {
@@ -269,7 +292,8 @@ class LibraryViewModel(
             var failed = 0
             var firstId: Long? = null
             for (uri in uris) {
-                library.importPdf(uri, target)
+                // balík .crescendo (skladba aj s poznámkami) alebo obyčajné PDF
+                (if (library.isPackage(uri)) library.importPackage(uri, target) else library.importPdf(uri, target))
                     .onSuccess { id ->
                         ok++
                         if (firstId == null) firstId = id
@@ -299,6 +323,60 @@ class LibraryViewModel(
                 }
                 .onFailure { say(app.getString(R.string.msg_import_failed), error = true) }
             importing.update { it - 1 }
+        }
+    }
+
+    /** Doplní strany z PDF (súbor alebo sken) do existujúcej skladby. */
+    fun appendToPiece(piece: PieceEntity, uri: Uri, atStart: Boolean) {
+        viewModelScope.launch {
+            importing.update { it + 1 }
+            library.appendPdf(piece, uri, atStart, (app as CrescendoApp).annotations)
+                .onSuccess { n -> say(app.getString(R.string.msg_pages_added, n, piece.title)) }
+                .onFailure { say(app.getString(R.string.msg_append_failed), error = true) }
+            importing.update { it - 1 }
+        }
+    }
+
+    fun editPages(piece: PieceEntity, pages: List<Pair<Int, Int>>) {
+        viewModelScope.launch {
+            importing.update { it + 1 }
+            library.editPages(piece, pages, (app as CrescendoApp).annotations)
+                .onSuccess { say(app.getString(R.string.msg_pages_saved)) }
+                .onFailure { say(app.getString(R.string.msg_pages_failed), error = true) }
+            importing.update { it - 1 }
+        }
+    }
+
+    fun splitPiece(piece: PieceEntity, parts: List<Triple<String, Int, Int>>, keepOriginal: Boolean) {
+        viewModelScope.launch {
+            importing.update { it + 1 }
+            library.splitPiece(piece, parts, keepOriginal, (app as CrescendoApp).annotations)
+                .onSuccess { n -> say(app.getString(R.string.msg_split_done, n)) }
+                .onFailure { say(app.getString(R.string.msg_pages_failed), error = true) }
+            importing.update { it - 1 }
+        }
+    }
+
+    /** Zbalí skladbu s poznámkami a otvorí zdieľanie. */
+    fun sharePiece(piece: PieceEntity) {
+        viewModelScope.launch {
+            val ok = runCatching {
+                val dir = java.io.File(app.cacheDir, "exports").apply { mkdirs() }
+                val safe = com.daklok.crescendo.pdf.PdfExporter.safeFileName(piece.title)
+                val file = java.io.File(dir, "$safe.crescendo")
+                library.exportPackage(piece, file)
+                val uri = androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.files", file)
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                    .setType("application/zip")
+                    .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    .putExtra(android.content.Intent.EXTRA_SUBJECT, piece.title)
+                    .putExtra(android.content.Intent.EXTRA_TEXT, app.getString(R.string.share_piece_text, piece.title))
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                app.startActivity(
+                    android.content.Intent.createChooser(send, piece.title).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.isSuccess
+            if (!ok) say(app.getString(R.string.export_failed), error = true)
         }
     }
 
