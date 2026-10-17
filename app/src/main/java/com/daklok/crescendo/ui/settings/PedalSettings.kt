@@ -24,7 +24,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +35,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.Cable
 import androidx.compose.material.icons.outlined.Piano
@@ -77,7 +79,10 @@ import com.daklok.crescendo.R
 import com.daklok.crescendo.data.AppSettings
 import com.daklok.crescendo.data.MidiPedals
 import com.daklok.crescendo.ui.common.Motion
+import com.daklok.crescendo.ui.common.PianoConnectionCard
+import com.daklok.crescendo.ui.common.SectionHeader
 import com.daklok.crescendo.ui.common.SettingSwitchRow
+import com.daklok.crescendo.ui.common.SettingsCard
 import kotlinx.coroutines.delay
 
 /** Čitateľný názov klávesy (napr. „PAGE DOWN“). */
@@ -94,11 +99,14 @@ fun pedalName(cc: Int): String =
     )
 
 /**
- * Nastavenie pedálov: Bluetooth otáčač strán (naučenie kláves) a pedál klavíra cez MIDI
- * (USB kábel alebo Bluetooth MIDI). Rovnaký obsah je v Nastaveniach aj v čítačke.
+ * Nastavenia „Klavír a pedále“ v troch jasných častiach:
+ * 1. Digitálny klavír – stav pripojenia a ako ho pripojiť,
+ * 2. Otáčanie strán pedálom klavíra,
+ * 3. Bluetooth otáčač strán (samostatné zariadenie).
+ * Rovnaký obsah je v Nastaveniach aj v čítačke.
  */
 @Composable
-fun ColumnScope.PedalSettingsContent(
+fun PedalSettingsContent(
     settings: AppSettings,
     update: ((AppSettings) -> AppSettings) -> Unit,
 ) {
@@ -106,106 +114,115 @@ fun ColumnScope.PedalSettingsContent(
     val midi = (context.applicationContext as CrescendoApp).midi
     var learnKey by remember { mutableStateOf<Boolean?>(null) } // true = ďalej, false = späť
     var learnMidi by remember { mutableStateOf<Boolean?>(null) }
-    var scanOpen by remember { mutableStateOf(false) }
 
-    // ── Bluetooth otáčač strán ──
-    RowLabel(Icons.Outlined.SettingsRemote, stringResource(R.string.pedal_bt_title))
-    Text(
-        stringResource(R.string.pedal_bt_desc),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 32.dp, bottom = 8.dp),
-    )
-    LearnRow(
-        label = stringResource(R.string.next_page),
-        value = if (settings.pedalNextKey != 0) keyName(settings.pedalNextKey) else stringResource(R.string.pedal_default_keys),
-        onLearn = { learnKey = true },
-        onReset = if (settings.pedalNextKey != 0) ({ update { it.copy(pedalNextKey = 0) } }) else null,
-    )
-    LearnRow(
-        label = stringResource(R.string.prev_page),
-        value = if (settings.pedalPrevKey != 0) keyName(settings.pedalPrevKey) else stringResource(R.string.pedal_default_keys),
-        onLearn = { learnKey = false },
-        onReset = if (settings.pedalPrevKey != 0) ({ update { it.copy(pedalPrevKey = 0) } }) else null,
-    )
-
-    Divider()
-
-    // ── Pedál klavíra (MIDI) ──
-    SettingSwitchRow(
-        icon = Icons.Outlined.Piano,
-        title = stringResource(R.string.pedal_midi_title),
-        subtitle = stringResource(if (midi.supported) R.string.pedal_midi_desc else R.string.pedal_midi_unsupported),
-        checked = settings.midiEnabled && midi.supported,
-        enabled = midi.supported,
-        onChange = { v -> update { it.copy(midiEnabled = v) } },
-    )
-    AnimatedVisibility(
-        visible = settings.midiEnabled && midi.supported,
-        enter = expandVertically(Motion.bouncy()) + fadeIn(tween(220)),
-        exit = shrinkVertically(tween(200)) + fadeOut(tween(160)),
-    ) {
-        // počas zobrazenia nastavení počúvame, aby bolo vidno, čo je pripojené
-        DisposableEffect(Unit) {
-            midi.start()
-            if (settings.midiBtAddress.isNotBlank()) midi.connectBluetoothAddress(settings.midiBtAddress)
-            onDispose { midi.stop() }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // ── 1. Digitálny klavír ──
+        SectionHeader(Icons.Outlined.Piano, stringResource(R.string.piano_section))
+        SettingsCard {
+            Text(
+                stringResource(R.string.piano_section_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            PianoConnectionCard()
+            Spacer(Modifier.size(14.dp))
+            Text(
+                stringResource(R.string.piano_how_title),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            HowToRow(Icons.Outlined.Cable, stringResource(R.string.piano_how_usb), stringResource(R.string.midi_cable_hint))
+            HowToRow(Icons.Outlined.Bluetooth, stringResource(R.string.piano_how_bt), stringResource(R.string.piano_how_bt_desc))
+            if (settings.midiBtName.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 34.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.piano_saved, settings.midiBtName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { update { it.copy(midiBtAddress = "", midiBtName = "") } }) {
+                        Text(stringResource(R.string.piano_forget))
+                    }
+                }
+            }
         }
-        val connected by midi.connected.collectAsStateWithLifecycle()
-        Column(Modifier.padding(start = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .background(
-                            if (connected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(50),
-                        ),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    if (connected.isNotEmpty()) stringResource(R.string.midi_connected, connected.joinToString(", "))
-                    else stringResource(R.string.midi_not_connected),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Outlined.Cable, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.midi_cable_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FilledTonalButton(onClick = { scanOpen = true }, shape = RoundedCornerShape(16.dp)) {
-                Icon(Icons.Outlined.Bluetooth, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (settings.midiBtName.isNotBlank()) stringResource(R.string.midi_bt_change, settings.midiBtName)
-                    else stringResource(R.string.midi_bt_connect),
-                )
-            }
-            Spacer(Modifier.size(4.dp))
-            LearnRow(
-                label = stringResource(R.string.next_page),
-                value = pedalName(settings.midiNextCc),
-                onLearn = { learnMidi = true },
-                onReset = null,
-            )
-            LearnRow(
-                label = stringResource(R.string.prev_page),
-                value = pedalName(settings.midiPrevCc),
-                onLearn = { learnMidi = false },
-                onReset = null,
-            )
+
+        Spacer(Modifier.size(12.dp))
+
+        // ── 2. Otáčanie strán pedálom klavíra ──
+        SectionHeader(Icons.Outlined.SwapHoriz, stringResource(R.string.piano_turn_section))
+        SettingsCard {
             SettingSwitchRow(
-                icon = Icons.Outlined.TouchApp,
-                title = stringResource(R.string.midi_double),
-                subtitle = stringResource(R.string.midi_double_desc),
-                checked = settings.midiDoublePress,
-                onChange = { v -> update { it.copy(midiDoublePress = v) } },
+                icon = Icons.Outlined.Piano,
+                title = stringResource(R.string.pedal_midi_title),
+                subtitle = stringResource(if (midi.supported) R.string.pedal_midi_desc else R.string.pedal_midi_unsupported),
+                checked = settings.midiEnabled && midi.supported,
+                enabled = midi.supported,
+                onChange = { v -> update { it.copy(midiEnabled = v) } },
+            )
+            AnimatedVisibility(
+                visible = settings.midiEnabled && midi.supported,
+                enter = expandVertically(Motion.bouncy()) + fadeIn(tween(220)),
+                exit = shrinkVertically(tween(200)) + fadeOut(tween(160)),
+            ) {
+                Column {
+                    Divider()
+                    LearnRow(
+                        icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                        label = stringResource(R.string.next_page),
+                        value = pedalName(settings.midiNextCc),
+                        onLearn = { learnMidi = true },
+                        onReset = null,
+                    )
+                    LearnRow(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        label = stringResource(R.string.prev_page),
+                        value = pedalName(settings.midiPrevCc),
+                        onLearn = { learnMidi = false },
+                        onReset = null,
+                    )
+                    Divider()
+                    SettingSwitchRow(
+                        icon = Icons.Outlined.TouchApp,
+                        title = stringResource(R.string.midi_double),
+                        subtitle = stringResource(R.string.midi_double_desc),
+                        checked = settings.midiDoublePress,
+                        onChange = { v -> update { it.copy(midiDoublePress = v) } },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.size(12.dp))
+
+        // ── 3. Bluetooth otáčač strán ──
+        SectionHeader(Icons.Outlined.SettingsRemote, stringResource(R.string.pedal_bt_title))
+        SettingsCard {
+            Text(
+                stringResource(R.string.pedal_bt_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            LearnRow(
+                icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                label = stringResource(R.string.next_page),
+                value = if (settings.pedalNextKey != 0) keyName(settings.pedalNextKey) else stringResource(R.string.pedal_default_keys),
+                onLearn = { learnKey = true },
+                onReset = if (settings.pedalNextKey != 0) ({ update { it.copy(pedalNextKey = 0) } }) else null,
+            )
+            LearnRow(
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                label = stringResource(R.string.prev_page),
+                value = if (settings.pedalPrevKey != 0) keyName(settings.pedalPrevKey) else stringResource(R.string.pedal_default_keys),
+                onLearn = { learnKey = false },
+                onReset = if (settings.pedalPrevKey != 0) ({ update { it.copy(pedalPrevKey = 0) } }) else null,
             )
         }
     }
@@ -231,32 +248,43 @@ fun ColumnScope.PedalSettingsContent(
             onDismiss = { learnMidi = null },
         )
     }
-    if (scanOpen) {
-        BleMidiScanDialog(
-            midi = midi,
-            onConnected = { address, name ->
-                update { it.copy(midiBtAddress = address, midiBtName = name) }
-                scanOpen = false
-            },
-            onDismiss = { scanOpen = false },
-        )
+}
+
+/** Návod: ikona, nadpis a krátky popis. */
+@Composable
+private fun HowToRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, text: String) {
+    Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 4.dp)) {
+        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 @Composable
-private fun LearnRow(label: String, value: String, onLearn: () -> Unit, onReset: (() -> Unit)?) {
+private fun LearnRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    onLearn: () -> Unit,
+    onReset: (() -> Unit)?,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 32.dp, top = 2.dp, bottom = 2.dp),
+            .padding(vertical = 2.dp),
     ) {
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
         if (onReset != null) TextButton(onClick = onReset) { Text(stringResource(R.string.calibration_reset)) }
-        TextButton(onClick = onLearn) { Text(stringResource(R.string.pedal_learn)) }
+        FilledTonalButton(onClick = onLearn, shape = RoundedCornerShape(14.dp)) { Text(stringResource(R.string.pedal_learn)) }
     }
 }
 
@@ -352,7 +380,7 @@ private fun MidiLearnDialog(midi: MidiPedals, title: String, onCc: (Int) -> Unit
 /** Vyhľadanie Bluetooth MIDI klavírov v okolí a pripojenie. */
 @SuppressLint("MissingPermission")
 @Composable
-private fun BleMidiScanDialog(
+internal fun BleMidiScanDialog(
     midi: MidiPedals,
     onConnected: (address: String, name: String) -> Unit,
     onDismiss: () -> Unit,

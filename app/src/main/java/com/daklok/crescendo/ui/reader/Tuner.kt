@@ -48,8 +48,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.Piano
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -64,6 +62,7 @@ import com.daklok.crescendo.data.music.ChordListener
 import com.daklok.crescendo.data.music.ChordQuality
 import com.daklok.crescendo.data.music.ChordSmoother
 import com.daklok.crescendo.data.music.HeldNotes
+import com.daklok.crescendo.ui.common.PianoConnectionCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -425,24 +424,12 @@ private fun ChordContent(modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val color by animateColorAsState(if (sounding) scheme.primary else scheme.onSurfaceVariant, label = "chordColor")
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // odkiaľ sa počúva
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                if (fromPiano) Icons.Outlined.Piano else Icons.Outlined.Mic,
-                null,
-                Modifier.size(16.dp),
-                tint = if (fromPiano) scheme.primary else scheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                if (fromPiano) stringResource(R.string.chord_from_piano, instruments.first().name)
-                else stringResource(R.string.chord_from_mic),
-                style = MaterialTheme.typography.labelMedium,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        // odkiaľ sa počúva: pripojený klavír (presne) alebo mikrofón
+        PianoConnectionCard(
+            compact = true,
+            connectedHint = stringResource(R.string.chord_hint_piano),
+            disconnectedHint = stringResource(R.string.chord_hint_mic),
+        )
         if (!fromPiano && !permitted) {
             Text(
                 stringResource(R.string.tuner_need_mic),

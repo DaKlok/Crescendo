@@ -2,4 +2,6 @@
 <paths>
     <!-- exportované PDF na zdieľanie -->
     <cache-path name="exports" path="exports/" />
+    <!-- zdieľanie vlastných nahrávok (.m4a, .mid) -->
+    <files-path name="recordings" path="recordings/" />
 </paths>

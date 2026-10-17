@@ -579,8 +579,10 @@ private fun ReaderContent(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
+                        // názov dostane len miesto, ktoré ostane po ikonách – dlhý sa skráti „…“, ikony sa zmestia vždy
                         modifier = Modifier
-                            .widthIn(max = if (compact) (if (setlist != null) 96.dp else 140.dp) else 420.dp)
+                            .weight(1f, fill = false)
+                            .widthIn(max = 420.dp)
                             .padding(horizontal = if (compact) 4.dp else 8.dp),
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )

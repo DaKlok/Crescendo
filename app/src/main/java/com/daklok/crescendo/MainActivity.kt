@@ -99,6 +99,8 @@ class MainActivity : ComponentActivity() {
 
         // dokončenie prechodu po zmene jazyka / obnovení zálohy
         val pendingOverlay = AppOverlay.consumePending(this)
+            // pri studenom štarte úvodná obrazovka, kým sa nenačíta knižnica (inak by noty na chvíľu chýbali)
+            ?: OverlayKind.STARTUP.takeIf { savedInstanceState == null && !AppOverlay.contentReady }
         if (pendingOverlay != null) {
             AppOverlay.show(pendingOverlay)
             // pozadie okna v rovnakej farbe ako prechodová obrazovka – žiadne bliknutie pred prvým snímkom
@@ -109,6 +111,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by libraryVm.settings.collectAsStateWithLifecycle()
+            // knižnica načítaná → o chvíľu (náhľady) môže úvodná obrazovka zmiznúť
+            val libraryLoaded by remember { libraryVm.state.map { it.loaded } }.collectAsStateWithLifecycle(false)
+            LaunchedEffect(libraryLoaded) {
+                if (libraryLoaded && !AppOverlay.contentReady) {
+                    kotlinx.coroutines.delay(350)
+                    AppOverlay.contentReady = true
+                }
+            }
             CrescendoTheme(mode = settings.themeMode, dynamicColor = settings.useDynamicColor) {
                 CompositionLocalProvider(LocalHapticsEnabled provides settings.haptics) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

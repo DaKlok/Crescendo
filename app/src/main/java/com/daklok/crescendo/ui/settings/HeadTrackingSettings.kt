@@ -334,10 +334,7 @@ fun GestureSettingsSheet(
             }
             Spacer(Modifier.height(16.dp))
             // pedále – tiež otáčajú strany, preto sú aj tu
-            SectionHeader(Icons.Outlined.Piano, stringResource(R.string.pedals))
-            SettingsCard {
-                PedalSettingsContent(settings = settings, update = update)
-            }
+            PedalSettingsContent(settings = settings, update = update)
         }
     }
 }

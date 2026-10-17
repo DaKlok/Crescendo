@@ -382,10 +382,8 @@ fun SettingsSheet(
                             }
                         }
                         SettingsPage.PEDALS -> {
-                            // ── Pedále ──
-                            SettingsCard {
-                                PedalSettingsContent(settings = settings, update = { t -> update(t) })
-                            }
+                            // ── Klavír a pedále (vlastné karty po sekciách) ──
+                            PedalSettingsContent(settings = settings, update = { t -> update(t) })
                         }
                         SettingsPage.BACKUP -> {
                             // ── Záloha ──

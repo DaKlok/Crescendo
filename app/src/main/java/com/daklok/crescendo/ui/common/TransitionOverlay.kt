@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.common
 
+import kotlinx.coroutines.flow.first
+import androidx.compose.material.icons.outlined.LibraryMusic
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -69,7 +71,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class OverlayKind { LANGUAGE, RESTORE, RESTORED }
+enum class OverlayKind { LANGUAGE, RESTORE, RESTORED, STARTUP }
 
 /**
  * Celoobrazovkové prechodové obrazovky (zmena jazyka, obnovenie zálohy).
@@ -78,6 +80,9 @@ enum class OverlayKind { LANGUAGE, RESTORE, RESTORED }
 object AppOverlay {
     var kind by mutableStateOf<OverlayKind?>(null)
         private set
+
+    /** Knižnica je načítaná (aj s náhľadmi) – úvodná / prechodová obrazovka môže zmiznúť. */
+    var contentReady by mutableStateOf(false)
 
     private const val PREFS = "crescendo_overlay"
     private const val KEY = "pending"
@@ -156,11 +161,24 @@ fun AppOverlayHost() {
                 // v novej (prestavanej) aktivite rýchlo zmizne; ak sa aktivita neprestavala
                 // (napr. jazyk sa v skutočnosti nezmenil), zavrie sa po krátkej poistke
                 delay(if (AppOverlay.startedIn(activityId)) 2500 else 650)
+                awaitContent(3000)
                 AppOverlay.consumePending(context)
                 AppOverlay.hide()
             }
             OverlayKind.RESTORED -> {
                 delay(1400)
+                awaitContent(4000)
+                AppOverlay.hide()
+            }
+            OverlayKind.STARTUP -> {
+                // úvodná obrazovka pri spustení: zmizne, keď je knižnica pripravená (poistka 5 s).
+                // Čas sa počíta od prvého skutočne vykresleného snímku – pri štarte býva prvých pár snímok
+                // pomalých – a animácia ostane viditeľná aspoň chvíľu, nech len neblikne.
+                androidx.compose.runtime.withFrameNanos { }
+                val shownAt = android.os.SystemClock.uptimeMillis()
+                awaitContent(5000)
+                val left = STARTUP_MIN_MS - (android.os.SystemClock.uptimeMillis() - shownAt)
+                if (left > 0) delay(left)
                 AppOverlay.hide()
             }
             else -> Unit
@@ -189,6 +207,16 @@ fun AppOverlayHost() {
     }
 }
 
+/** Ako dlho najmenej ostane úvodná obrazovka viditeľná (od prvého snímku). */
+private const val STARTUP_MIN_MS = 1100L
+
+/** Počká, kým je obsah pripravený (najviac [timeoutMs]). */
+private suspend fun awaitContent(timeoutMs: Long) {
+    kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+        androidx.compose.runtime.snapshotFlow { AppOverlay.contentReady }.first { it }
+    }
+}
+
 @Composable
 private fun OverlayContent(kind: OverlayKind) {
     val backupState by LocalContext.current.backupManager.state.collectAsStateWithLifecycle()
@@ -203,6 +231,11 @@ private fun OverlayContent(kind: OverlayKind) {
             Icons.Outlined.Restore,
             stringResource(R.string.ov_restore_title),
             (backupState as? BackupState.Working)?.label ?: stringResource(R.string.ov_restore_sub),
+        )
+        OverlayKind.STARTUP -> Triple(
+            Icons.Outlined.LibraryMusic,
+            "Crescendo",
+            stringResource(R.string.ov_startup_sub),
         )
         OverlayKind.RESTORED -> Triple(
             Icons.Outlined.CloudDone,
@@ -224,7 +257,8 @@ private fun OverlayContent(kind: OverlayKind) {
             modifier = Modifier.padding(32.dp),
         ) {
             // morfujúci „expressive“ tvar s ikonou – pri zobrazení pružne „vyskočí“
-            val appear = remember { MutableTransitionState(false).apply { targetState = true } }
+            // pri štarte aplikácie je tvar viditeľný hneď (bez „vyskočenia“), aby sa neobjavil až neskoro
+            val appear = remember { MutableTransitionState(kind == OverlayKind.STARTUP).apply { targetState = true } }
             AnimatedVisibility(
                 visibleState = appear,
                 enter = scaleIn(initialScale = 0.6f, animationSpec = Motion.bouncy()) + fadeIn(),

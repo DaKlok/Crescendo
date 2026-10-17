@@ -96,11 +96,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.daklok.crescendo.data.MidiInstrument
+import com.daklok.crescendo.ui.common.PianoConnectionCard
 import com.daklok.crescendo.data.midi.MidiCapture
 import com.daklok.crescendo.data.midi.MidiFile
 import com.daklok.crescendo.data.midi.MidiRenderer
-import com.daklok.crescendo.ui.settings.BleMidiScanDialog
 import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.R
 import kotlinx.coroutines.CoroutineScope
@@ -354,14 +353,10 @@ fun AudioPanel(
     val midi = app.midi
     val midiSupported = midi.supported
     val midiConnected by midi.connected.collectAsStateWithLifecycle()
-    val midiInstruments by midi.instruments.collectAsStateWithLifecycle()
-    val midiActivity by midi.activity.collectAsStateWithLifecycle()
-    val midiManualOff by midi.manualOff.collectAsStateWithLifecycle()
     val rendering by MidiRenderer.rendering.collectAsStateWithLifecycle()
     val renderFailed by MidiRenderer.failed.collectAsStateWithLifecycle()
     val btAddress by remember { app.settings.settings.map { it.midiBtAddress } }.collectAsStateWithLifecycle("")
     var source by rememberSaveable { mutableIntStateOf(-1) } // -1 automaticky, 0 mikrofón, 1 klavír
-    var scanOpen by remember { mutableStateOf(false) }
 
     val reference = remember(pieceId, version) { audio.reference(pieceId) }
     val recordings = remember(pieceId, version) { audio.recordings(pieceId) }
@@ -523,15 +518,7 @@ fun AudioPanel(
                             }
                             // výrazné potvrdenie: či je klavír pripojený a ako sa volá
                             if ((useMidi && !recording) || recorder.midiMode) {
-                                PianoStatusCard(
-                                    instruments = midiInstruments,
-                                    activity = midiActivity,
-                                    recording = recorder.midiMode,
-                                    manualOff = midiManualOff,
-                                    onBluetooth = { scanOpen = true },
-                                    onDisconnect = { midi.disconnect() },
-                                    onReconnect = { midi.reconnect(btAddress) },
-                                )
+                                PianoConnectionCard(recording = recorder.midiMode)
                             }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -691,16 +678,6 @@ fun AudioPanel(
             onDismiss = { confirmDeleteRecording = null },
         )
     }
-    if (scanOpen) {
-        BleMidiScanDialog(
-            midi = midi,
-            onConnected = { address, name ->
-                copyScope.launch { app.settings.update { it.copy(midiBtAddress = address, midiBtName = name) } }
-                scanOpen = false
-            },
-            onDismiss = { scanOpen = false },
-        )
-    }
     if (confirmDeleteReference) {
         ConfirmDialog(
             title = stringResource(R.string.reference_delete_title),
@@ -817,157 +794,5 @@ private fun shareRecording(context: Context, f: File) {
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-}
-
-/**
- * Výrazná karta stavu klavíra: pripojený (názov, USB / Bluetooth) alebo nie.
- * Kontrolka vpravo blikne pri každej zahranej note – vidno, že klavír naozaj posiela dáta.
- */
-@Composable
-private fun PianoStatusCard(
-    instruments: List<MidiInstrument>,
-    activity: Long,
-    recording: Boolean,
-    manualOff: Boolean,
-    onBluetooth: () -> Unit,
-    onDisconnect: () -> Unit,
-    onReconnect: () -> Unit,
-) {
-    val connected = instruments.isNotEmpty()
-    val scheme = MaterialTheme.colorScheme
-    var lit by remember { mutableStateOf(false) }
-    LaunchedEffect(activity) {
-        if (activity > 0 && android.os.SystemClock.uptimeMillis() - activity < 1000) {
-            lit = true
-            delay(160)
-            lit = false
-        }
-    }
-    val container by animateColorAsState(
-        when {
-            connected -> scheme.primaryContainer
-            recording -> scheme.errorContainer
-            else -> scheme.surfaceContainerHighest
-        },
-        label = "pianoCard",
-    )
-    val onContainer = when {
-        connected -> scheme.onPrimaryContainer
-        recording -> scheme.onErrorContainer
-        else -> scheme.onSurface
-    }
-    Surface(shape = RoundedCornerShape(20.dp), color = container, contentColor = onContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .background(if (connected) scheme.primary else scheme.outlineVariant, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Outlined.Piano,
-                    null,
-                    Modifier.size(22.dp),
-                    tint = if (connected) scheme.onPrimary else scheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                if (connected) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.CheckCircle, null, Modifier.size(14.dp), tint = scheme.primary)
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.rec_piano_connected), style = MaterialTheme.typography.labelMedium)
-                    }
-                    instruments.forEach { inst ->
-                        Text(
-                            inst.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            stringResource(
-                                when {
-                                    inst.bluetooth -> R.string.rec_via_bluetooth
-                                    inst.virtual -> R.string.rec_via_virtual
-                                    else -> R.string.rec_via_usb
-                                },
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (!recording) {
-                        Text(
-                            stringResource(R.string.rec_play_to_test),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = onContainer.copy(alpha = 0.75f),
-                        )
-                        TextButton(
-                            onClick = onDisconnect,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                        ) {
-                            Icon(Icons.Outlined.LinkOff, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.midi_disconnect))
-                        }
-                    }
-                } else {
-                    Text(
-                        stringResource(
-                            when {
-                                recording -> R.string.rec_piano_lost
-                                manualOff -> R.string.midi_disconnected
-                                else -> R.string.rec_piano_none
-                            },
-                        ),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        stringResource(
-                            when {
-                                recording -> R.string.rec_piano_lost_hint
-                                manualOff -> R.string.midi_disconnected_hint
-                                else -> R.string.rec_piano_none_hint
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-            if (connected) {
-                val led by animateFloatAsState(if (lit) 1f else 0.22f, tween(if (lit) 40 else 320), label = "led")
-                Box(
-                    Modifier
-                        .padding(start = 8.dp)
-                        .size(14.dp)
-                        .alpha(led)
-                        .background(scheme.primary, CircleShape),
-                )
-            } else if (!recording && manualOff) {
-                FilledTonalButton(
-                    onClick = onReconnect,
-                    shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Icon(Icons.Outlined.Link, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.midi_reconnect))
-                }
-            } else if (!recording) {
-                FilledTonalButton(
-                    onClick = onBluetooth,
-                    shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Icon(Icons.Outlined.Bluetooth, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.rec_bluetooth))
-                }
-            }
-        }
     }
 }
