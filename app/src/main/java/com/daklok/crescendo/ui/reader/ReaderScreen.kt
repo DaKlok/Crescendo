@@ -3,7 +3,9 @@ package com.daklok.crescendo.ui.reader
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Piano
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.VerticalSplit
 import androidx.compose.material.icons.outlined.Crop
 import androidx.compose.material.icons.outlined.DarkMode
@@ -51,6 +53,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -181,6 +184,7 @@ private fun ReaderContent(
     var metronomeOpen by remember { mutableStateOf(false) }
     var audioOpen by remember { mutableStateOf(false) }
     var tunerOpen by remember { mutableStateOf(false) }
+    var visOpen by remember { mutableStateOf(false) }
     // prehrávanie a nahrávanie žijú v čítačke, nie v paneli – zatvorenie panela ich nepreruší
     val audioScope = rememberCoroutineScope()
     val audioPlayer = remember { AudioPlayer(audioScope) }
@@ -274,6 +278,7 @@ private fun ReaderContent(
             metronomeOpen = false
             audioOpen = false
             tunerOpen = false
+            visOpen = false
             zoom = 1f
             pan = Offset.Zero
             stageHint = true
@@ -625,17 +630,22 @@ private fun ReaderContent(
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.metronome)) },
                                     leadingIcon = { Icon(Icons.Outlined.Timer, null) },
-                                    onClick = { more = false; metronomeOpen = true; audioOpen = false; tunerOpen = false },
+                                    onClick = { more = false; metronomeOpen = true; audioOpen = false; tunerOpen = false; visOpen = false },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.tuner)) },
                                     leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) },
-                                    onClick = { more = false; tunerOpen = true; metronomeOpen = false; audioOpen = false },
+                                    onClick = { more = false; tunerOpen = true; metronomeOpen = false; audioOpen = false; visOpen = false },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.audio_title)) },
                                     leadingIcon = { Icon(Icons.Outlined.Headphones, null) },
-                                    onClick = { more = false; audioOpen = true; metronomeOpen = false; tunerOpen = false },
+                                    onClick = { more = false; audioOpen = true; metronomeOpen = false; tunerOpen = false; visOpen = false },
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.visualizer)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Piano, null) },
+                                    onClick = { more = false; visOpen = true; audioOpen = false; metronomeOpen = false; tunerOpen = false },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.gesture_settings)) },
@@ -673,19 +683,25 @@ private fun ReaderContent(
                             icon = Icons.Outlined.Timer,
                             contentDescription = stringResource(R.string.metronome),
                             highlighted = metronome.playing || metronomeOpen,
-                            onClick = { metronomeOpen = !metronomeOpen; audioOpen = false; tunerOpen = false },
+                            onClick = { metronomeOpen = !metronomeOpen; audioOpen = false; tunerOpen = false; visOpen = false },
                         )
                         TonalIconButton(
                             icon = Icons.Outlined.GraphicEq,
                             contentDescription = stringResource(R.string.tuner),
                             highlighted = tunerOpen,
-                            onClick = { tunerOpen = !tunerOpen; metronomeOpen = false; audioOpen = false },
+                            onClick = { tunerOpen = !tunerOpen; metronomeOpen = false; audioOpen = false; visOpen = false },
                         )
                         TonalIconButton(
                             icon = Icons.Outlined.Headphones,
                             contentDescription = stringResource(R.string.audio_title),
                             highlighted = audioOpen,
-                            onClick = { audioOpen = !audioOpen; metronomeOpen = false; tunerOpen = false },
+                            onClick = { audioOpen = !audioOpen; metronomeOpen = false; tunerOpen = false; visOpen = false },
+                        )
+                        TonalIconButton(
+                            icon = Icons.Outlined.Piano,
+                            contentDescription = stringResource(R.string.visualizer),
+                            highlighted = visOpen,
+                            onClick = { visOpen = !visOpen; metronomeOpen = false; audioOpen = false; tunerOpen = false },
                         )
                         Box {
                             var displayMenu by remember { mutableStateOf(false) }
@@ -928,6 +944,100 @@ private fun ReaderContent(
             )
         }
 
+        // Klavírny vizualizér – široký panel dole (noty ostávajú viditeľné hore)
+        AnimatedVisibility(
+            visible = visOpen && metronomePieceId != null,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = barBottom + 8.dp, start = if (compact) 8.dp else 16.dp, end = if (compact) 8.dp else 16.dp),
+            enter = fadeIn() + slideInVertically(Motion.bouncy()) { it / 2 },
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it / 2 },
+        ) {
+            metronomePieceId?.let { pid ->
+                VisualizerPanel(
+                    pieceId = pid,
+                    onClose = { visOpen = false },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 1100.dp),
+                )
+            }
+        }
+
+        // Vizualizér sa pripravuje na pozadí (panel je zatvorený) – plávajúca ikonka s priebehom; ťuk ho otvorí
+        metronomePieceId?.let { pid ->
+            val crescendoApp = context.applicationContext as com.daklok.crescendo.CrescendoApp
+            val renderMap by com.daklok.crescendo.data.midi.MidiRenderer.rendering.collectAsStateWithLifecycle()
+            val midiVer by crescendoApp.pieceMidi.version.collectAsStateWithLifecycle()
+            val visKey = remember(pid, midiVer) { crescendoApp.pieceMidi.renderKey(pid) }
+            val visProgress = visKey?.let { renderMap[it] }
+            var wasLoading by remember { mutableStateOf(false) }
+            var justReady by remember { mutableStateOf(false) }
+            LaunchedEffect(visProgress == null) {
+                if (visProgress != null) {
+                    wasLoading = true
+                } else if (wasLoading) {
+                    wasLoading = false
+                    justReady = true
+                    kotlinx.coroutines.delay(4000)
+                    justReady = false
+                }
+            }
+            AnimatedVisibility(
+                visible = !visOpen && (visProgress != null || justReady),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(bottom = barBottom + 12.dp, end = 16.dp),
+                enter = fadeIn() + scaleIn(Motion.bouncy()),
+                exit = fadeOut() + androidx.compose.animation.scaleOut(),
+            ) {
+                Surface(
+                    onClick = {
+                        justReady = false
+                        visOpen = true
+                        metronomeOpen = false
+                        audioOpen = false
+                        tunerOpen = false
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shadowElevation = 6.dp,
+                ) {
+                    Row(
+                        Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                            val p = visProgress
+                            if (p == null) {
+                                Icon(Icons.Outlined.CheckCircle, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                            } else if (p < 0f) {
+                                androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                            } else {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    progress = { p.coerceAtLeast(0.02f) },
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 3.dp,
+                                )
+                                Icon(Icons.Outlined.Piano, null, Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (visProgress == null) stringResource(R.string.vis_ready)
+                            else if (visProgress < 0f) stringResource(R.string.visualizer)
+                            else stringResource(R.string.vis_preparing_short, (visProgress * 100).toInt()),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+
         // Ladička a akordy
         AnimatedVisibility(
             visible = tunerOpen,
@@ -1115,6 +1225,22 @@ private fun DisplayToggles(
     settings: com.daklok.crescendo.data.AppSettings,
     update: ((com.daklok.crescendo.data.AppSettings) -> com.daklok.crescendo.data.AppSettings) -> Unit,
 ) {
+    // dve strany vedľa seba (pri orientácii na šírku)
+    androidx.compose.material3.DropdownMenuItem(
+        text = {
+            androidx.compose.foundation.layout.Column {
+                Text(stringResource(R.string.two_pages))
+                Text(
+                    stringResource(R.string.two_pages_desc),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        leadingIcon = { Icon(Icons.Outlined.AutoStories, null) },
+        trailingIcon = { androidx.compose.material3.Switch(checked = settings.twoPageSpread, onCheckedChange = null) },
+        onClick = { update { it.copy(twoPageSpread = !it.twoPageSpread) } },
+    )
     androidx.compose.material3.DropdownMenuItem(
         text = { Text(stringResource(R.string.night_mode)) },
         leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },

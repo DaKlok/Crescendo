@@ -26,6 +26,7 @@ class CrescendoApp : Application() {
     val backup by lazy { BackupManager(this) }
     val practice by lazy { database.practiceDao() }
     val pieceAudio by lazy { com.daklok.crescendo.data.PieceAudio(this) }
+    val pieceMidi by lazy { com.daklok.crescendo.data.PieceMidi(this) }
     val catalog by lazy { com.daklok.crescendo.data.CatalogRepository(this) }
     /** Pedále klavíra cez MIDI (USB / Bluetooth). */
     val midi by lazy { com.daklok.crescendo.data.MidiPedals(this) }

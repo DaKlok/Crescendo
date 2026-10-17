@@ -51,7 +51,7 @@ class BackupManager(private val app: CrescendoApp) {
     private val mutex = Mutex()
 
     /** Priečinky v `filesDir`, ktoré patria do zálohy. */
-    private val folders = listOf("pdfs", "thumbs", "annotations", "datastore", "audio", "recordings")
+    private val folders = listOf("pdfs", "thumbs", "annotations", "datastore", "audio", "recordings", "piece_midi")
 
     /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk, tempá metronómu). */
     private val prefsNames = listOf("annotation_tools", "crescendo_language", "metronome")

@@ -5,9 +5,10 @@ import java.io.File
 
 /**
  * Jedna MIDI udalosť v čase (sekundy od začiatku).
- * [status] je bez kanála: 0x90 note on, 0x80 note off, 0xB0 control change.
+ * [status] je bez kanála: 0x90 note on, 0x80 note off, 0xB0 control change, 0xC0 zmena nástroja (program v [data1]).
+ * [channel] 0–15 (pri súboroch s viacerými nástrojmi – každý hlas má svoj kanál).
  */
-data class NoteEvent(val time: Double, val status: Int, val data1: Int, val data2: Int)
+data class NoteEvent(val time: Double, val status: Int, val data1: Int, val data2: Int, val channel: Int = 0, val track: Int = 0)
 
 /** Zápis a čítanie štandardných MIDI súborov (.mid). */
 object MidiFile {
@@ -41,9 +42,9 @@ object MidiFile {
             val tick = Math.round(e.time * 1000.0).coerceAtLeast(lastTick)
             vlq(tick - lastTick)
             lastTick = tick
-            track.write(e.status and 0xF0)
+            track.write((e.status and 0xF0) or (e.channel and 0x0F))
             track.write(e.data1 and 0x7F)
-            track.write(e.data2 and 0x7F)
+            if (e.status and 0xF0 != 0xC0) track.write(e.data2 and 0x7F)
         }
         vlq(0)
         track.write(byteArrayOf(0xFF.toByte(), 0x2F, 0x00))
@@ -85,10 +86,10 @@ object MidiFile {
         require(division and 0x8000 == 0) { "SMPTE timing not supported" }
 
         // (tik, poradie, udalosť) – tempo sa prepočíta až po zlúčení stôp
-        class Raw(val tick: Long, val order: Int, val status: Int, val d1: Int, val d2: Int, val tempo: Int = 0)
+        class Raw(val tick: Long, val order: Int, val status: Int, val d1: Int, val d2: Int, val tempo: Int = 0, val ch: Int = 0, val tr: Int = 0)
         val raws = ArrayList<Raw>()
         var order = 0
-        repeat(tracks) {
+        repeat(tracks) { trackIndex ->
             if (p + 8 > data.size) return@repeat
             val id = tag()
             val len = u32()
@@ -141,10 +142,12 @@ object MidiFile {
                         val drums = status and 0x0F == 9 // kanál 10 = bicie – klavírom nehráme
                         val d1 = u8()
                         val d2 = if (type == 0xC0 || type == 0xD0) 0 else u8()
+                        val ch = status and 0x0F
                         if (!drums) when (type) {
-                            0x90 -> raws.add(Raw(tick, order++, if (d2 == 0) 0x80 else 0x90, d1, d2))
-                            0x80 -> raws.add(Raw(tick, order++, 0x80, d1, d2))
-                            0xB0 -> raws.add(Raw(tick, order++, 0xB0, d1, d2))
+                            0x90 -> raws.add(Raw(tick, order++, if (d2 == 0) 0x80 else 0x90, d1, d2, ch = ch, tr = trackIndex))
+                            0x80 -> raws.add(Raw(tick, order++, 0x80, d1, d2, ch = ch, tr = trackIndex))
+                            0xB0 -> raws.add(Raw(tick, order++, 0xB0, d1, d2, ch = ch, tr = trackIndex))
+                            0xC0 -> raws.add(Raw(tick, order++, 0xC0, d1, 0, ch = ch, tr = trackIndex))
                         }
                     }
                 }
@@ -160,7 +163,7 @@ object MidiFile {
         for (r in raws) {
             seconds += (r.tick - lastTick) * tempo / 1_000_000.0 / division
             lastTick = r.tick
-            if (r.status == 0xFF) tempo = r.tempo.toDouble() else out.add(NoteEvent(seconds, r.status, r.d1, r.d2))
+            if (r.status == 0xFF) tempo = r.tempo.toDouble() else out.add(NoteEvent(seconds, r.status, r.d1, r.d2, r.ch, r.tr))
         }
         return out
     }

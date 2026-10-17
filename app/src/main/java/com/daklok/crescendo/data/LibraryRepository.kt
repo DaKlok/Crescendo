@@ -372,8 +372,7 @@ class LibraryRepository(
             )
             File(root, "notes.json").takeIf { it.exists() }?.copyTo(File(context.filesDir, "annotations/$id.json"), overwrite = true)
             root.listFiles()?.firstOrNull { it.name.startsWith("audio.") }?.let { a ->
-                val audioDir = File(context.filesDir, "audio").apply { mkdirs() }
-                a.copyTo(File(audioDir, "$id.${a.extension}"), overwrite = true)
+                PieceAudio(context).addFile(id, a, piece.title.take(60))
             }
             Result.success(id)
         } catch (e: Throwable) {

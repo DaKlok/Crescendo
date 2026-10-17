@@ -69,7 +69,7 @@ object SyncState {
     fun hasLocalChanges(c: Context): Boolean {
         val since = lastSyncLocal(c) + 2_000
         val files = c.filesDir
-        val dirs = listOf("pdfs", "annotations", "audio", "recordings", "datastore")
+        val dirs = listOf("pdfs", "annotations", "audio", "recordings", "datastore", "piece_midi")
         val db = c.getDatabasePath("crescendo.db")
         val candidates = sequenceOf(db, File(db.path + "-wal")) +
             dirs.asSequence().flatMap { File(files, it).walkTopDown().filter { f -> f.isFile } }
