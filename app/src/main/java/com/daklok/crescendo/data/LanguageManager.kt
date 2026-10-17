@@ -60,6 +60,14 @@ object LanguageManager {
         }
     }
 
+    /** Android 13+: nastaví systémový jazyk aplikácie podľa uloženej voľby (po obnove zálohy). */
+    fun applySaved(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val tag = savedTag(context) ?: return
+        context.getSystemService(LocaleManager::class.java)?.applicationLocales =
+            if (tag.isEmpty()) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(tag)
+    }
+
     /** Pre Android 12 a starší: obalí kontext zvoleným jazykom (volá sa v attachBaseContext). */
     fun wrap(base: Context): Context {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return base

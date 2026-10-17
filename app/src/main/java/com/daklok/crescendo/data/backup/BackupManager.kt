@@ -23,6 +23,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import org.json.JSONArray
+import com.daklok.crescendo.data.LanguageManager
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -50,6 +52,9 @@ class BackupManager(private val app: CrescendoApp) {
 
     /** Priečinky v `filesDir`, ktoré patria do zálohy. */
     private val folders = listOf("pdfs", "thumbs", "annotations", "datastore")
+
+    /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk). */
+    private val prefsNames = listOf("annotation_tools", "crescendo_language")
     private val dbName = "crescendo.db"
 
     val authorizationRequest: AuthorizationRequest =
@@ -193,6 +198,10 @@ class BackupManager(private val app: CrescendoApp) {
             zos.write(manifest.toString().toByteArray())
             zos.closeEntry()
 
+            zos.putNextEntry(ZipEntry("prefs.json"))
+            zos.write(exportPrefs().toString().toByteArray())
+            zos.closeEntry()
+
             val db = app.getDatabasePath(dbName)
             if (db.exists()) addFile(zos, db, "db/$dbName")
 
@@ -238,6 +247,10 @@ class BackupManager(private val app: CrescendoApp) {
             while (true) {
                 val e = zis.nextEntry ?: break
                 if (e.isDirectory) continue
+                if (e.name == "prefs.json") {
+                    runCatching { importPrefs(JSONObject(zis.readBytes().toString(Charsets.UTF_8))) }
+                    continue
+                }
                 val target = when {
                     e.name == "db/$dbName" -> dbFile
                     e.name.startsWith("files/") -> File(filesRoot, e.name.removePrefix("files/"))
@@ -250,6 +263,51 @@ class BackupManager(private val app: CrescendoApp) {
                 FileOutputStream(canon).use { zis.copyTo(it) }
             }
         }
+    }
+
+    private fun exportPrefs(): JSONObject {
+        val root = JSONObject()
+        prefsNames.forEach { name ->
+            val obj = JSONObject()
+            app.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (key, v) ->
+                val entry = when (v) {
+                    is Boolean -> JSONObject().put("t", "b").put("v", v)
+                    is Int -> JSONObject().put("t", "i").put("v", v)
+                    is Long -> JSONObject().put("t", "l").put("v", v)
+                    is Float -> JSONObject().put("t", "f").put("v", v.toDouble())
+                    is String -> JSONObject().put("t", "s").put("v", v)
+                    is Set<*> -> JSONObject().put("t", "set").put("v", JSONArray(v.map { it.toString() }))
+                    else -> null
+                }
+                if (entry != null) obj.put(key, entry)
+            }
+            root.put(name, obj)
+        }
+        return root
+    }
+
+    private fun importPrefs(root: JSONObject) {
+        prefsNames.forEach { name ->
+            val obj = root.optJSONObject(name) ?: return@forEach
+            val ed = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear()
+            for (key in obj.keys()) {
+                val e = obj.getJSONObject(key)
+                when (e.optString("t")) {
+                    "b" -> ed.putBoolean(key, e.getBoolean("v"))
+                    "i" -> ed.putInt(key, e.getInt("v"))
+                    "l" -> ed.putLong(key, e.getLong("v"))
+                    "f" -> ed.putFloat(key, e.getDouble("v").toFloat())
+                    "s" -> ed.putString(key, e.getString("v"))
+                    "set" -> {
+                        val arr = e.getJSONArray("v")
+                        ed.putStringSet(key, (0 until arr.length()).map { arr.getString(it) }.toSet())
+                    }
+                }
+            }
+            ed.commit()
+        }
+        // na Androide 13+ jazyk drží systém – nastavíme ho podľa zálohy
+        LanguageManager.applySaved(app)
     }
 
     private fun restartApp() {
