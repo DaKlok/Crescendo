@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">O aplikácii</string>
+    <string name="about_support">O aplikácii a podpora</string>
     <string name="add_to_setlist">Pridať do setlistu</string>
     <string name="all_count">Všetko · %1$d</string>
     <string name="annotations">Poznámky</string>
     <string name="appearance">Vzhľad</string>
+    <string name="appearance_language">Vzhľad a jazyk</string>
     <string name="author_line">Autor · zdrojový kód na GitHube</string>
     <string name="auto_backup">Automatická záloha</string>
     <string name="auto_backup_desc">Raz denne, len cez Wi-Fi a pri dostatku batérie</string>
@@ -16,6 +18,8 @@
     <string name="backup_intro">Prihlás sa Google účtom a Crescendo si bude všetko ukladať na tvoj Google Drive – noty, poznámky, priečinky aj nastavenia. Na novom tablete to potom jedným ťuknutím obnovíš.</string>
     <string name="backup_now">Zálohovať teraz</string>
     <string name="backup_privacy">Aplikácia vidí iba vlastný skrytý priečinok, nie tvoje ostatné súbory.</string>
+    <string name="backup_summary_off">Google Drive alebo súbor</string>
+    <string name="backup_title">Záloha</string>
     <string name="bk_connected">Pripojené: %1$s</string>
     <string name="bk_connecting">Pripájam Google účet…</string>
     <string name="bk_corrupt">Súbor zálohy je poškodený</string>
@@ -205,6 +209,8 @@
     <string name="pedal_sostenuto">Sostenuto pedál (stredný)</string>
     <string name="pedal_sustain">Sustain pedál (pravý)</string>
     <string name="pedals">Pedále</string>
+    <string name="pedals_summary">Bluetooth pedál · pedál klavíra (vypnutý)</string>
+    <string name="pedals_summary_midi">Bluetooth pedál · klavír: %1$s</string>
     <string name="pen_color">Farba pera</string>
     <string name="piece_default_title">Skladba</string>
     <string name="pieces">Skladby</string>
@@ -280,6 +286,8 @@
     <string name="stamp_custom_hint">napr. dýchaj, pomalšie, 3×</string>
     <string name="stamp_delete">Zmazať pečiatku</string>
     <string name="stamp_size">Veľkosť pečiatky</string>
+    <string name="state_off">Vypnuté</string>
+    <string name="state_on">Zapnuté</string>
     <string name="support">Podpora</string>
     <string name="support_desc">Ak sa ti aplikácia páči a chceš podporiť jej vývoj, môžeš mi kúpiť kávu ☕</string>
     <string name="swap_eyes">Vymeniť oči</string>
@@ -297,6 +305,7 @@
     <string name="tool_pen">Pero</string>
     <string name="tool_shapes">Tvary</string>
     <string name="tool_stamp">Pečiatky</string>
+    <string name="toolbar_on_side">Panel: %1$s</string>
     <string name="toolbar_position">Poloha panela</string>
     <string name="toolbar_position_long">Poloha panela nástrojov</string>
     <string name="tracking_no_face">Nevidím tvár</string>

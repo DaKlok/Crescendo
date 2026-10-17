@@ -38,9 +38,17 @@ class DriveClient(private val accessToken: String) {
     }
 
     /** E-mail prihláseného účtu. */
-    suspend fun userEmail(): String = withContext(Dispatchers.IO) {
-        val json = getJson("$API/about?fields=user(emailAddress,displayName)")
-        json.getJSONObject("user").optString("emailAddress", "")
+    suspend fun userEmail(): String = userInfo().email
+
+    /** E-mail, meno a profilová fotka prihláseného účtu. */
+    suspend fun userInfo(): DriveUser = withContext(Dispatchers.IO) {
+        val user = getJson("$API/about?fields=user(emailAddress,displayName,photoLink)").getJSONObject("user")
+        DriveUser(
+            email = user.optString("emailAddress", ""),
+            name = user.optString("displayName", ""),
+            // väčšia verzia fotky (Google ju posiela ako …=s64)
+            photo = user.optString("photoLink", "").replace(Regex("=s\\d+(-c)?$"), "=s128"),
+        )
     }
 
     /** Všetky zálohy (najnovšia prvá). */
@@ -173,3 +181,6 @@ class DriveClient(private val accessToken: String) {
         f.parse(s)?.time ?: 0L
     }.getOrDefault(0L)
 }
+
+
+data class DriveUser(val email: String, val name: String, val photo: String)

@@ -1,5 +1,20 @@
 package com.daklok.crescendo.ui.settings
 
+import com.daklok.crescendo.ui.common.AUTHOR_AVATAR_URL
+import com.daklok.crescendo.ui.common.RemoteAvatar
+import com.daklok.crescendo.ui.common.IconBadge
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Piano
 import com.daklok.crescendo.ui.common.isCompactWidth
 import com.daklok.crescendo.CrescendoApp
@@ -126,6 +141,7 @@ fun SettingsSheet(
     val settings by repo.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var page by rememberSaveable { mutableStateOf(SettingsPage.HOME) }
     fun update(t: (AppSettings) -> AppSettings) {
         scope.launch { repo.update(t) }
     }
@@ -148,11 +164,31 @@ fun SettingsSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 24.dp, end = 8.dp, bottom = 12.dp),
+                        .padding(start = if (page == SettingsPage.HOME) 24.dp else 8.dp, end = 8.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    // nadpis: „Nastavenia“ alebo šípka späť + názov kategórie
+                    AnimatedContent(
+                        targetState = page,
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
+                        label = "settingsTitle",
+                        modifier = Modifier.weight(1f),
+                    ) { p ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (p != SettingsPage.HOME) {
+                                IconButton(onClick = { page = SettingsPage.HOME }, modifier = Modifier.padding(end = 4.dp)) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                                }
+                            }
+                            Text(
+                                stringResource(p.titleRes),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                     IconButton(onClick = close) {
                         Icon(
                             Icons.Outlined.Close,
@@ -164,186 +200,300 @@ fun SettingsSheet(
             }
         },
     ) {
-        Column(
-            modifier = Modifier
-                // panel siaha len do ~90 % výšky obrazovky (ako v Bible Lock Screen)
-                .fillMaxHeight(0.9f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = if (isCompactWidth()) 12.dp else 24.dp)
-                .padding(bottom = 40.dp)
-                .navigationBarsPadding(),
-        ) {
-            // ── Jazyk ──
-            SectionHeader(Icons.Outlined.Language, stringResource(R.string.language))
-            SettingsCard {
-                val ctx = LocalContext.current
-                val activity = remember(ctx) {
-                    var c: android.content.Context? = ctx
-                    while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
-                    c as? android.app.Activity
-                }
-                val currentLanguage = remember { activity?.let { LanguageManager.current(it) } ?: AppLanguage.SYSTEM }
-                Segmented(
-                    options = AppLanguage.entries,
-                    selected = currentLanguage,
-                    label = { it.labelRes },
-                    onSelect = { lang ->
-                        if (lang != currentLanguage && activity != null) {
-                            // najprv ukážeme prechodovú obrazovku, až potom sa aplikácia prestaví
-                            AppOverlay.show(OverlayKind.LANGUAGE, owner = activity)
-                            AppOverlay.markPending(activity, OverlayKind.LANGUAGE)
-                            // nie v rozsahu panela – ten sa počas prechodu skryje a jeho práce by sa zrušili
-                            (activity.application as CrescendoApp).appScope.launch {
-                                kotlinx.coroutines.delay(450)
-                                LanguageManager.set(activity, lang)
+        // Späť v podstránke = návrat na zoznam kategórií
+        BackHandler(enabled = page != SettingsPage.HOME) { page = SettingsPage.HOME }
+        // panel siaha len do ~90 % výšky obrazovky (ako v Bible Lock Screen)
+        Box(Modifier.fillMaxHeight(0.9f)) {
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = {
+                    val forward = targetState != SettingsPage.HOME
+                    val dir = if (forward) 1 else -1
+                    (fadeIn(tween(220, delayMillis = 40)) + slideInHorizontally(Motion.gentle()) { dir * it / 4 }) togetherWith
+                        (fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { -dir * it / 6 })
+                },
+                label = "settingsPage",
+            ) { p ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = if (isCompactWidth()) 12.dp else 24.dp)
+                        .padding(bottom = 40.dp)
+                        .navigationBarsPadding(),
+                ) {
+                    when (p) {
+                        SettingsPage.HOME -> SettingsHome(settings = settings, onOpen = { page = it })
+                        SettingsPage.APPEARANCE -> {
+                            // ── Jazyk ──
+                            SectionHeader(Icons.Outlined.Language, stringResource(R.string.language))
+                            SettingsCard {
+                                val ctx = LocalContext.current
+                                val activity = remember(ctx) {
+                                    var c: android.content.Context? = ctx
+                                    while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+                                    c as? android.app.Activity
+                                }
+                                val currentLanguage = remember { activity?.let { LanguageManager.current(it) } ?: AppLanguage.SYSTEM }
+                                Segmented(
+                                    options = AppLanguage.entries,
+                                    selected = currentLanguage,
+                                    label = { it.labelRes },
+                                    onSelect = { lang ->
+                                        if (lang != currentLanguage && activity != null) {
+                                            // najprv ukážeme prechodovú obrazovku, až potom sa aplikácia prestaví
+                                            AppOverlay.show(OverlayKind.LANGUAGE, owner = activity)
+                                            AppOverlay.markPending(activity, OverlayKind.LANGUAGE)
+                                            // nie v rozsahu panela – ten sa počas prechodu skryje a jeho práce by sa zrušili
+                                            (activity.application as CrescendoApp).appScope.launch {
+                                                kotlinx.coroutines.delay(450)
+                                                LanguageManager.set(activity, lang)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            Spacer(Modifier.height(20.dp))
+                            // ── Vzhľad ──
+                            SectionHeader(Icons.Outlined.Palette, stringResource(R.string.appearance))
+                            SettingsCard {
+                                Segmented(
+                                    options = ThemeMode.entries,
+                                    selected = settings.themeMode,
+                                    label = { it.labelRes },
+                                    onSelect = { m -> update { it.copy(themeMode = m) } },
+                                )
+                                Text(
+                                    stringResource(R.string.paper_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 10.dp, start = 4.dp),
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.AutoAwesome,
+                                    title = stringResource(R.string.dynamic_colors),
+                                    subtitle = stringResource(R.string.dynamic_colors_desc),
+                                    checked = settings.useDynamicColor,
+                                    enabled = settings.themeMode != ThemeMode.PAPER,
+                                    onChange = { v -> update { it.copy(useDynamicColor = v) } },
+                                )
+                            }
+                            Spacer(Modifier.height(20.dp))
+                            // ── Všeobecné ──
+                            SectionHeader(Icons.Outlined.Tune, stringResource(R.string.general))
+                            SettingsCard {
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.Vibration,
+                                    title = stringResource(R.string.haptics),
+                                    subtitle = stringResource(R.string.haptics_desc),
+                                    checked = settings.haptics,
+                                    onChange = { v -> update { it.copy(haptics = v) } },
+                                )
                             }
                         }
-                    },
-                )
+                        SettingsPage.READER -> {
+                            // ── Čítačka ──
+                            SettingsCard {
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.AutoStories,
+                                    title = stringResource(R.string.two_pages),
+                                    subtitle = stringResource(R.string.two_pages_desc),
+                                    checked = settings.twoPageSpread,
+                                    onChange = { v -> update { it.copy(twoPageSpread = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.TouchApp,
+                                    title = stringResource(R.string.tap_to_turn),
+                                    subtitle = stringResource(R.string.tap_to_turn_desc),
+                                    checked = settings.tapToTurn,
+                                    onChange = { v -> update { it.copy(tapToTurn = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
+                                    title = stringResource(R.string.volume_keys),
+                                    subtitle = stringResource(R.string.volume_keys_desc),
+                                    checked = settings.volumeKeysTurn,
+                                    onChange = { v -> update { it.copy(volumeKeysTurn = v) } },
+                                )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.LightMode,
+                                    title = stringResource(R.string.keep_screen_on),
+                                    subtitle = stringResource(R.string.keep_screen_on_desc),
+                                    checked = settings.keepScreenOn,
+                                    onChange = { v -> update { it.copy(keepScreenOn = v) } },
+                                )
+                            }
+                        }
+                        SettingsPage.ANNOTATIONS -> {
+                            // ── Poznámky ──
+                            SettingsCard {
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.TouchApp,
+                                    title = stringResource(R.string.draw_with_finger),
+                                    subtitle = stringResource(R.string.draw_with_finger_desc),
+                                    checked = settings.fingerDrawing,
+                                    onChange = { v -> update { it.copy(fingerDrawing = v) } },
+                                )
+                                Divider()
+                                RowLabel(Icons.Outlined.ViewSidebar, stringResource(R.string.toolbar_position_long))
+                                Segmented(
+                                    options = ToolbarPosition.entries,
+                                    selected = settings.toolbarPosition,
+                                    label = { it.labelRes },
+                                    onSelect = { p -> update { it.copy(toolbarPosition = p) } },
+                                )
+                            }
+                        }
+                        SettingsPage.HEAD -> {
+                            // ── Otáčanie hlavou ──
+                            SettingsCard {
+                                HeadTrackingSettingsContent(settings = settings, update = { t -> update(t) })
+                            }
+                        }
+                        SettingsPage.PEDALS -> {
+                            // ── Pedále ──
+                            SettingsCard {
+                                PedalSettingsContent(settings = settings, update = { t -> update(t) })
+                            }
+                        }
+                        SettingsPage.BACKUP -> {
+                            // ── Záloha ──
+                            SectionHeader(Icons.Outlined.CloudUpload, stringResource(R.string.backup_drive))
+                            BackupSection(settings = settings, repo = repo, backup = backup)
+                            Spacer(Modifier.height(20.dp))
+                            // ── Offline záloha ──
+                            SectionHeader(Icons.Outlined.FolderZip, stringResource(R.string.backup_file))
+                            LocalBackupSection(backup = backup)
+                        }
+                        SettingsPage.ABOUT -> {
+                            // ── Podpora ──
+                            SectionHeader(Icons.Outlined.FavoriteBorder, stringResource(R.string.support))
+                            SupportCard()
+                            Spacer(Modifier.height(20.dp))
+                            // ── O aplikácii ──
+                            SectionHeader(Icons.Outlined.Info, stringResource(R.string.about))
+                            AboutCard()
+                        }
+                    }
+                }
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Vzhľad ──
-            SectionHeader(Icons.Outlined.Palette, stringResource(R.string.appearance))
-            SettingsCard {
-                Segmented(
-                    options = ThemeMode.entries,
-                    selected = settings.themeMode,
-                    label = { it.labelRes },
-                    onSelect = { m -> update { it.copy(themeMode = m) } },
-                )
-                Text(
-                    stringResource(R.string.paper_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp, start = 4.dp),
-                )
-                Divider()
-                SettingSwitchRow(
-                    icon = Icons.Outlined.AutoAwesome,
-                    title = stringResource(R.string.dynamic_colors),
-                    subtitle = stringResource(R.string.dynamic_colors_desc),
-                    checked = settings.useDynamicColor,
-                    enabled = settings.themeMode != ThemeMode.PAPER,
-                    onChange = { v -> update { it.copy(useDynamicColor = v) } },
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Čítačka ──
-            SectionHeader(Icons.AutoMirrored.Outlined.MenuBook, stringResource(R.string.reader))
-            SettingsCard {
-                SettingSwitchRow(
-                    icon = Icons.Outlined.AutoStories,
-                    title = stringResource(R.string.two_pages),
-                    subtitle = stringResource(R.string.two_pages_desc),
-                    checked = settings.twoPageSpread,
-                    onChange = { v -> update { it.copy(twoPageSpread = v) } },
-                )
-                Divider()
-                SettingSwitchRow(
-                    icon = Icons.Outlined.TouchApp,
-                    title = stringResource(R.string.tap_to_turn),
-                    subtitle = stringResource(R.string.tap_to_turn_desc),
-                    checked = settings.tapToTurn,
-                    onChange = { v -> update { it.copy(tapToTurn = v) } },
-                )
-                Divider()
-                SettingSwitchRow(
-                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
-                    title = stringResource(R.string.volume_keys),
-                    subtitle = stringResource(R.string.volume_keys_desc),
-                    checked = settings.volumeKeysTurn,
-                    onChange = { v -> update { it.copy(volumeKeysTurn = v) } },
-                )
-                Divider()
-                SettingSwitchRow(
-                    icon = Icons.Outlined.LightMode,
-                    title = stringResource(R.string.keep_screen_on),
-                    subtitle = stringResource(R.string.keep_screen_on_desc),
-                    checked = settings.keepScreenOn,
-                    onChange = { v -> update { it.copy(keepScreenOn = v) } },
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Poznámky ──
-            SectionHeader(Icons.Outlined.Draw, stringResource(R.string.annotations))
-            SettingsCard {
-                SettingSwitchRow(
-                    icon = Icons.Outlined.TouchApp,
-                    title = stringResource(R.string.draw_with_finger),
-                    subtitle = stringResource(R.string.draw_with_finger_desc),
-                    checked = settings.fingerDrawing,
-                    onChange = { v -> update { it.copy(fingerDrawing = v) } },
-                )
-                Divider()
-                RowLabel(Icons.Outlined.ViewSidebar, stringResource(R.string.toolbar_position_long))
-                Segmented(
-                    options = ToolbarPosition.entries,
-                    selected = settings.toolbarPosition,
-                    label = { it.labelRes },
-                    onSelect = { p -> update { it.copy(toolbarPosition = p) } },
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Otáčanie hlavou ──
-            SectionHeader(Icons.Outlined.Face, stringResource(R.string.head_tracking))
-            SettingsCard {
-                HeadTrackingSettingsContent(settings = settings, update = { t -> update(t) })
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Pedále ──
-            SectionHeader(Icons.Outlined.Piano, stringResource(R.string.pedals))
-            SettingsCard {
-                PedalSettingsContent(settings = settings, update = { t -> update(t) })
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Všeobecné ──
-            SectionHeader(Icons.Outlined.Tune, stringResource(R.string.general))
-            SettingsCard {
-                SettingSwitchRow(
-                    icon = Icons.Outlined.Vibration,
-                    title = stringResource(R.string.haptics),
-                    subtitle = stringResource(R.string.haptics_desc),
-                    checked = settings.haptics,
-                    onChange = { v -> update { it.copy(haptics = v) } },
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Záloha ──
-            SectionHeader(Icons.Outlined.CloudUpload, stringResource(R.string.backup_drive))
-            BackupSection(settings = settings, repo = repo, backup = backup)
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Offline záloha ──
-            SectionHeader(Icons.Outlined.FolderZip, stringResource(R.string.backup_file))
-            LocalBackupSection(backup = backup)
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Podpora ──
-            SectionHeader(Icons.Outlined.FavoriteBorder, stringResource(R.string.support))
-            SupportCard()
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── O aplikácii ──
-            SectionHeader(Icons.Outlined.Info, stringResource(R.string.about))
-            AboutCard()
         }
+    }
+}
+
+/** Kategórie nastavení – hlavná stránka je krátky zoznam, detail sa otvorí ťuknutím. */
+internal enum class SettingsPage(@androidx.annotation.StringRes val titleRes: Int, val icon: ImageVector) {
+    HOME(R.string.settings, Icons.Outlined.Settings),
+    APPEARANCE(R.string.appearance_language, Icons.Outlined.Palette),
+    READER(R.string.reader, Icons.AutoMirrored.Outlined.MenuBook),
+    ANNOTATIONS(R.string.annotations, Icons.Outlined.Draw),
+    HEAD(R.string.head_tracking, Icons.Outlined.Face),
+    PEDALS(R.string.pedals, Icons.Outlined.Piano),
+    BACKUP(R.string.backup_title, Icons.Outlined.CloudUpload),
+    ABOUT(R.string.about_support, Icons.Outlined.Info),
+}
+
+/** Hlavná stránka: kategórie v troch kartách, pri každej krátky stav. */
+@Composable
+private fun SettingsHome(settings: AppSettings, onOpen: (SettingsPage) -> Unit) {
+    val context = LocalContext.current
+    val language = remember {
+        var c: android.content.Context? = context
+        while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+        (c as? android.app.Activity)?.let { LanguageManager.current(it) } ?: AppLanguage.SYSTEM
+    }
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
+    }
+    val dot = " · "
+
+    val readerSummary = listOfNotNull(
+        stringResource(R.string.two_pages).takeIf { settings.twoPageSpread },
+        stringResource(R.string.tap_to_turn).takeIf { settings.tapToTurn },
+        stringResource(R.string.keep_screen_on).takeIf { settings.keepScreenOn },
+        stringResource(R.string.volume_keys).takeIf { settings.volumeKeysTurn },
+    ).joinToString(dot).ifEmpty { stringResource(R.string.state_off) }
+
+    val annotationsSummary = listOfNotNull(
+        stringResource(R.string.toolbar_on_side, stringResource(settings.toolbarPosition.labelRes)),
+        stringResource(R.string.draw_with_finger).takeIf { settings.fingerDrawing },
+    ).joinToString(dot)
+
+    val preset = com.daklok.crescendo.data.GesturePreset.entries.firstOrNull { it.map == settings.gestureMap }
+    val headSummary = if (settings.headTrackingEnabled) {
+        stringResource(R.string.state_on) + dot + stringResource(preset?.labelRes ?: R.string.preset_custom)
+    } else stringResource(R.string.state_off)
+
+    val pedalSummary = if (settings.midiEnabled) {
+        stringResource(R.string.pedals_summary_midi, settings.midiBtName.ifBlank { "MIDI" })
+    } else stringResource(R.string.pedals_summary)
+
+    val backupSummary = when {
+        settings.backupEmail.isNotBlank() && settings.lastBackupAt > 0 ->
+            stringResource(R.string.last_backup, formatTime(settings.lastBackupAt))
+        settings.backupEmail.isNotBlank() -> stringResource(R.string.bk_connected, settings.backupEmail)
+        else -> stringResource(R.string.backup_summary_off)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsCard {
+            CategoryRow(SettingsPage.APPEARANCE, stringResource(settings.themeMode.labelRes) + dot + stringResource(language.labelRes), onOpen)
+            Divider()
+            CategoryRow(SettingsPage.READER, readerSummary, onOpen)
+            Divider()
+            CategoryRow(SettingsPage.ANNOTATIONS, annotationsSummary, onOpen)
+        }
+        SettingsCard {
+            CategoryRow(SettingsPage.HEAD, headSummary, onOpen)
+            Divider()
+            CategoryRow(SettingsPage.PEDALS, pedalSummary, onOpen)
+        }
+        SettingsCard {
+            CategoryRow(SettingsPage.BACKUP, backupSummary, onOpen)
+            Divider()
+            CategoryRow(SettingsPage.ABOUT, stringResource(R.string.version_line, version), onOpen)
+        }
+    }
+}
+
+/** Riadok kategórie: farebná ikona, názov, stav a šípka. */
+@Composable
+private fun CategoryRow(page: SettingsPage, summary: String, onOpen: (SettingsPage) -> Unit) {
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(interaction, 0.98f)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple()) {
+                haptic(HapticFeedbackType.TextHandleMove)
+                onOpen(page)
+            }
+            .padding(vertical = 4.dp),
+    ) {
+        IconBadge(page.icon, active = true, size = 40.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(page.titleRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -429,20 +579,8 @@ private fun AboutCard() {
                 }
                 .padding(vertical = 8.dp),
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-            ) {
-                Text(
-                    "D",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            // profilová fotka autora z GitHubu
+            RemoteAvatar(url = AUTHOR_AVATAR_URL, fallback = "D", size = 40.dp)
             Column(Modifier.weight(1f)) {
                 Text("DaKlok", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Text(

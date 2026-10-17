@@ -2,10 +2,12 @@
 <resources>
     <string name="app_name" translatable="false">Crescendo</string>
     <string name="about">About</string>
+    <string name="about_support">About &amp; support</string>
     <string name="add_to_setlist">Add to setlist</string>
     <string name="all_count">All · %1$d</string>
     <string name="annotations">Annotations</string>
     <string name="appearance">Appearance</string>
+    <string name="appearance_language">Appearance &amp; language</string>
     <string name="author_line">Author · source code on GitHub</string>
     <string name="auto_backup">Automatic backup</string>
     <string name="auto_backup_desc">Once a day, only on Wi-Fi and with enough battery</string>
@@ -17,6 +19,8 @@
     <string name="backup_intro">Sign in with your Google account and Crescendo will keep everything on your Google Drive – sheet music, annotations, folders and settings. On a new tablet you can restore it all with one tap.</string>
     <string name="backup_now">Back up now</string>
     <string name="backup_privacy">The app only sees its own hidden folder, not your other files.</string>
+    <string name="backup_summary_off">Google Drive or file</string>
+    <string name="backup_title">Backup</string>
     <string name="bk_connected">Connected: %1$s</string>
     <string name="bk_connecting">Connecting Google account…</string>
     <string name="bk_corrupt">The backup file is damaged</string>
@@ -206,6 +210,8 @@
     <string name="pedal_sostenuto">Sostenuto pedal (middle)</string>
     <string name="pedal_sustain">Sustain pedal (right)</string>
     <string name="pedals">Pedals</string>
+    <string name="pedals_summary">Bluetooth pedal · piano pedals (off)</string>
+    <string name="pedals_summary_midi">Bluetooth pedal · piano: %1$s</string>
     <string name="pen_color">Pen color</string>
     <string name="piece_default_title">Piece</string>
     <string name="pieces">Pieces</string>
@@ -281,6 +287,8 @@
     <string name="stamp_custom_hint">e.g. breathe, slower, 3×</string>
     <string name="stamp_delete">Delete stamp</string>
     <string name="stamp_size">Stamp size</string>
+    <string name="state_off">Off</string>
+    <string name="state_on">On</string>
     <string name="support">Support</string>
     <string name="support_desc">If you like the app and want to support its development, you can buy me a coffee ☕</string>
     <string name="swap_eyes">Swap eyes</string>
@@ -298,6 +306,7 @@
     <string name="tool_pen">Pen</string>
     <string name="tool_shapes">Shapes</string>
     <string name="tool_stamp">Stamps</string>
+    <string name="toolbar_on_side">Toolbar: %1$s</string>
     <string name="toolbar_position">Toolbar position</string>
     <string name="toolbar_position_long">Toolbar position</string>
     <string name="tracking_no_face">Can’t see your face</string>

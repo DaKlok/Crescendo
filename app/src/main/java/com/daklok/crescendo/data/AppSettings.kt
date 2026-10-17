@@ -103,6 +103,9 @@ data class AppSettings(
     // Záloha na Google Drive
     /** E-mail pripojeného Google účtu ("" = nepripojený). */
     val backupEmail: String = "",
+    /** Meno a profilová fotka Google účtu (z Google Drive). */
+    val backupName: String = "",
+    val backupPhoto: String = "",
     val autoBackup: Boolean = false,
     /** Čas poslednej úspešnej zálohy (ms), 0 = ešte žiadna. */
     val lastBackupAt: Long = 0L,
@@ -148,6 +151,8 @@ class SettingsRepository(private val context: Context) {
         val midiBtAddress = stringPreferencesKey("midi_bt_addr")
         val midiBtName = stringPreferencesKey("midi_bt_name")
         val backupEmail = stringPreferencesKey("backup_email")
+        val backupName = stringPreferencesKey("backup_name")
+        val backupPhoto = stringPreferencesKey("backup_photo")
         val autoBackup = booleanPreferencesKey("auto_backup")
         val lastBackupAt = longPreferencesKey("last_backup_at")
     }
@@ -192,6 +197,8 @@ class SettingsRepository(private val context: Context) {
             prefs[K.midiBtAddress] = updated.midiBtAddress
             prefs[K.midiBtName] = updated.midiBtName
             prefs[K.backupEmail] = updated.backupEmail
+            prefs[K.backupName] = updated.backupName
+            prefs[K.backupPhoto] = updated.backupPhoto
             prefs[K.autoBackup] = updated.autoBackup
             prefs[K.lastBackupAt] = updated.lastBackupAt
         }
@@ -235,6 +242,8 @@ class SettingsRepository(private val context: Context) {
             midiBtAddress = this[K.midiBtAddress] ?: d.midiBtAddress,
             midiBtName = this[K.midiBtName] ?: d.midiBtName,
             backupEmail = this[K.backupEmail] ?: d.backupEmail,
+            backupName = this[K.backupName] ?: d.backupName,
+            backupPhoto = this[K.backupPhoto] ?: d.backupPhoto,
             autoBackup = this[K.autoBackup] ?: d.autoBackup,
             lastBackupAt = this[K.lastBackupAt] ?: d.lastBackupAt,
         )

@@ -78,8 +78,9 @@ class BackupManager(private val app: CrescendoApp) {
     /** Po prihlásení: zistí e-mail a uloží ho. */
     suspend fun connect(token: String): Boolean = guarded(null) {
         _state.value = BackupState.Working(app.getString(R.string.bk_connecting))
-        val email = DriveClient(token).userEmail()
-        app.settings.update { it.copy(backupEmail = email) }
+        val user = DriveClient(token).userInfo()
+        val email = user.email
+        app.settings.update { it.copy(backupEmail = email, backupName = user.name, backupPhoto = user.photo) }
         _state.value = BackupState.Done(app.getString(R.string.bk_connected, email))
     }
 
@@ -88,8 +89,17 @@ class BackupManager(private val app: CrescendoApp) {
             if (token != null) runCatching { GoogleAuthUtil.clearToken(app, token) }
         }
         BackupScheduler.setEnabled(app, false)
-        app.settings.update { it.copy(backupEmail = "", autoBackup = false) }
+        app.settings.update { it.copy(backupEmail = "", backupName = "", backupPhoto = "", autoBackup = false) }
         _state.value = BackupState.Idle
+    }
+
+    /** Doplní meno a fotku účtu (pre účty pripojené pred touto verziou) – potichu, bez chýb v UI. */
+    suspend fun refreshProfile() {
+        val token = silentToken() ?: return
+        runCatching {
+            val user = DriveClient(token).userInfo()
+            app.settings.update { it.copy(backupName = user.name, backupPhoto = user.photo) }
+        }
     }
 
     suspend fun remoteInfo(token: String): RemoteBackup? =

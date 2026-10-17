@@ -1,5 +1,6 @@
 package com.daklok.crescendo.ui.settings
 
+import com.daklok.crescendo.ui.common.RemoteAvatar
 import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.ui.common.OverlayKind
 import com.daklok.crescendo.ui.common.AppOverlay
@@ -204,26 +205,29 @@ fun BackupSection(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        ) {
-                            Text(
-                                settings.backupEmail.take(1).uppercase(),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                        // profilová fotka Google účtu (doplní sa aj pre staršie pripojenia)
+                        LaunchedEffect(settings.backupEmail) {
+                            if (settings.backupPhoto.isBlank()) backup.refreshProfile()
                         }
+                        RemoteAvatar(
+                            url = settings.backupPhoto.ifBlank { null },
+                            fallback = settings.backupName.ifBlank { settings.backupEmail },
+                            size = 44.dp,
+                        )
                         Column(Modifier.weight(1f)) {
-                            Text(settings.backupEmail, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "Google Drive",
+                                settings.backupName.ifBlank { settings.backupEmail },
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                if (settings.backupName.isNotBlank()) settings.backupEmail else "Google Drive",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
                         }
                         TextButton(onClick = { confirmDisconnect = true }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
@@ -400,7 +404,7 @@ private fun InfoRow(
     }
 }
 
-private fun formatTime(ms: Long): String =
+internal fun formatTime(ms: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault()).format(Date(ms))
 
 private fun formatSize(bytes: Long): String = when {
