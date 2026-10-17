@@ -3,6 +3,9 @@ package com.daklok.crescendo.ui.reader
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
@@ -32,7 +35,21 @@ fun Modifier.zoomPanGestures(
     pan: () -> Offset,
     singleFingerPan: () -> Boolean,
     onChange: (zoom: Float, pan: Offset) -> Unit,
-): Modifier = pointerInput(Unit) {
+): Modifier = composed {
+    // vždy aktuálne hodnoty – gesto sa nereštartuje, ale musí vidieť napr. zapnutie kreslenia prstom
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentPan by rememberUpdatedState(pan)
+    val allowPan by rememberUpdatedState(singleFingerPan)
+    val change by rememberUpdatedState(onChange)
+    pointerInput(Unit) { zoomPanLoop({ currentZoom() }, { currentPan() }, { allowPan() }, { z, p -> change(z, p) }) }
+}
+
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.zoomPanLoop(
+    zoom: () -> Float,
+    pan: () -> Offset,
+    singleFingerPan: () -> Boolean,
+    onChange: (zoom: Float, pan: Offset) -> Unit,
+) {
     val slop = viewConfiguration.touchSlop
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)

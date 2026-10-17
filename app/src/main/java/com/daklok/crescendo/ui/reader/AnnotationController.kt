@@ -1,5 +1,8 @@
 package com.daklok.crescendo.ui.reader
 
+import kotlin.math.abs
+import com.daklok.crescendo.data.PieceNotes
+import com.daklok.crescendo.data.Stamp
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
@@ -30,6 +33,8 @@ private sealed interface EditAction {
     class Composite(val actions: List<EditAction>) : EditAction
     /** Stav celej strany pred a po úprave (guma). */
     class Snapshot(val page: Int, val before: List<InkStroke>, val after: List<InkStroke>) : EditAction
+    /** Pečiatky strany pred a po úprave. */
+    class StampSnapshot(val page: Int, val before: List<Stamp>, val after: List<Stamp>) : EditAction
 }
 
 /** Stav a logika poznámok pre jednu skladbu: ťahy po stranách, nástroje, undo/redo, ukladanie. */
@@ -39,6 +44,25 @@ class AnnotationController(
     private val scope: CoroutineScope,
 ) {
     val pages = mutableStateMapOf<Int, List<InkStroke>>()
+    val stamps = mutableStateMapOf<Int, List<Stamp>>()
+
+    /** Vybraná pečiatka (text alebo symbol „§…“) a jej veľkosť (zlomok šírky strany). */
+    var stampText by mutableStateOf("p")
+    var stampSize by mutableFloatStateOf(STAMP_SIZES[1])
+
+    /** Naposledy použité vlastné texty pečiatok. */
+    val recentStampTexts = androidx.compose.runtime.mutableStateListOf<String>()
+
+    /** Pečiatka, ktorá sa práve ťahá (na vykreslenie posunu). */
+    var draggedStamp by mutableStateOf<Stamp?>(null)
+    var dragDx by mutableFloatStateOf(0f)
+    var dragDy by mutableFloatStateOf(0f)
+
+    /** Vybraná (ťuknutím) pečiatka – dá sa jej zmeniť veľkosť, farba alebo ju zmazať. */
+    var selectedStamp by mutableStateOf<Stamp?>(null)
+        private set
+    var selectedStampPage by mutableIntStateOf(-1)
+        private set
 
     var enabled by mutableStateOf(false)
     var tool by mutableStateOf(InkTool.PEN)
@@ -66,6 +90,9 @@ class AnnotationController(
     var eraserCursor by mutableStateOf<androidx.compose.ui.geometry.Offset?>(null)
     var eraserCursorPage by mutableIntStateOf(-1)
 
+    /** Naposledy použité vlastné farby (z farebného kolieska), najnovšia prvá. */
+    val recentColors = androidx.compose.runtime.mutableStateListOf<Int>()
+
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
@@ -86,10 +113,15 @@ class AnnotationController(
         penWidth = p.getFloat("pen_width", penWidth)
         highlightWidth = p.getFloat("highlight_width", highlightWidth)
         eraserSize = p.getFloat("eraser_size", eraserSize)
+        p.getString("recent_colors", null)?.split(',')?.mapNotNull { it.toIntOrNull() }?.let { recentColors.addAll(it) }
+        stampText = p.getString("stamp_text", stampText) ?: stampText
+        stampSize = p.getFloat("stamp_size", stampSize)
+        p.getString("recent_stamps", null)?.split('\u0001')?.filter { it.isNotBlank() }?.let { recentStampTexts.addAll(it) }
 
         scope.launch {
             snapshotFlow {
-                listOf(tool.name, shapeKind.name, penColor, highlightColor, penWidth, highlightWidth, eraserSize)
+                listOf(tool.name, shapeKind.name, penColor, highlightColor, penWidth, highlightWidth, eraserSize, recentColors.toList(),
+                    stampText, stampSize, recentStampTexts.toList())
             }.drop(1).collect {
                 p.edit()
                     .putString("tool", tool.name)
@@ -99,6 +131,10 @@ class AnnotationController(
                     .putFloat("pen_width", penWidth)
                     .putFloat("highlight_width", highlightWidth)
                     .putFloat("eraser_size", eraserSize)
+                    .putString("recent_colors", recentColors.joinToString(","))
+                    .putString("stamp_text", stampText)
+                    .putFloat("stamp_size", stampSize)
+                    .putString("recent_stamps", recentStampTexts.joinToString("\u0001"))
                     .apply()
             }
         }
@@ -113,11 +149,119 @@ class AnnotationController(
 
     suspend fun load() {
         val data = store.load(pieceId)
-        data.forEach { (page, strokes) -> if (pages[page].isNullOrEmpty()) pages[page] = strokes }
+        data.pages.forEach { (page, strokes) -> if (pages[page].isNullOrEmpty()) pages[page] = strokes }
+        data.stamps.forEach { (page, list) -> if (stamps[page].isNullOrEmpty()) stamps[page] = list }
         loaded = true
     }
 
     fun strokesOf(page: Int): List<InkStroke> = pages[page] ?: emptyList()
+
+    fun stampsOf(page: Int): List<Stamp> = stamps[page] ?: emptyList()
+
+    /** Aktuálny stav všetkých poznámok (na export). */
+    fun snapshot(): PieceNotes = PieceNotes(pages.toMap(), stamps.toMap())
+
+    // ---- pečiatky ----
+
+    /** Polomer „zásahu“ pečiatky v normalizovaných súradniciach (x voči šírke, y voči výške). */
+    private fun stampHalfSize(st: Stamp, ratio: Float): Pair<Float, Float> {
+        val chars = if (st.text.startsWith("§")) 2 else st.text.length.coerceAtLeast(1)
+        val hw = st.size * (0.35f * chars).coerceIn(0.6f, 6f)
+        val hh = st.size * 0.7f * ratio
+        return hw to hh
+    }
+
+    /** Pečiatka pod bodom (najvrchnejšia), alebo null. */
+    fun stampAt(page: Int, x: Float, y: Float, ratio: Float): Stamp? =
+        stampsOf(page).lastOrNull { st ->
+            val (hw, hh) = stampHalfSize(st, ratio)
+            abs(x - st.x) <= hw + 0.008f && abs(y - st.y) <= hh + 0.008f * ratio
+        }
+
+    fun placeStamp(page: Int, x: Float, y: Float) {
+        val before = stampsOf(page)
+        val st = Stamp(stampText, x, y, stampSize, penColor)
+        stamps[page] = before + st
+        pushUndo(EditAction.StampSnapshot(page, before, stamps[page]!!))
+    }
+
+    fun removeStamp(page: Int, stamp: Stamp) {
+        val before = stampsOf(page)
+        if (stamp !in before) return
+        stamps[page] = before - stamp
+        pushUndo(EditAction.StampSnapshot(page, before, stamps[page]!!))
+    }
+
+    fun moveStamp(page: Int, stamp: Stamp, dx: Float, dy: Float) {
+        val before = stampsOf(page)
+        if (stamp !in before) return
+        val moved = Stamp(stamp.text, stamp.x + dx, stamp.y + dy, stamp.size, stamp.color)
+        stamps[page] = before.map { if (it === stamp) moved else it }
+        selectStamp(page, moved)
+        pushUndo(EditAction.StampSnapshot(page, before, stamps[page]!!))
+    }
+
+    /** Vlastný text pečiatky – nastaví ho a zapamätá (max. 6). */
+    fun useCustomStampText(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        stampText = t
+        recentStampTexts.remove(t)
+        recentStampTexts.add(0, t)
+        while (recentStampTexts.size > 6) recentStampTexts.removeAt(recentStampTexts.lastIndex)
+    }
+
+    // ---- výber pečiatky ----
+
+    fun selectStamp(page: Int, stamp: Stamp?) {
+        selectedStamp = stamp
+        selectedStampPage = if (stamp == null) -1 else page
+        // nástroje ukazujú veľkosť vybranej pečiatky
+        if (stamp != null) stampSize = stamp.size
+    }
+
+    fun deleteSelectedStamp() {
+        val st = selectedStamp ?: return
+        val page = selectedStampPage
+        selectStamp(-1, null)
+        removeStamp(page, st)
+    }
+
+    private var resizeBefore: List<Stamp>? = null
+
+    /** Zmena veľkosti: bez vybranej pečiatky len nastaví veľkosť pre nové pečiatky. */
+    fun setStampSizeLive(size: Float) {
+        stampSize = size
+        val st = selectedStamp ?: return
+        val page = selectedStampPage
+        val list = stampsOf(page)
+        if (st !in list) return
+        if (resizeBefore == null) resizeBefore = list
+        val resized = Stamp(st.text, st.x, st.y, size, st.color)
+        stamps[page] = list.map { if (it === st) resized else it }
+        selectedStamp = resized
+    }
+
+    /** Koniec ťahania posuvníka – jeden krok „Späť“ pre celú zmenu veľkosti. */
+    fun commitStampResize() {
+        val before = resizeBefore ?: return
+        resizeBefore = null
+        val page = selectedStampPage
+        if (page >= 0) pushUndo(EditAction.StampSnapshot(page, before, stampsOf(page)))
+    }
+
+    /** Zmena farby vybranej pečiatky. */
+    private fun recolorSelectedStamp(color: Int) {
+        val st = selectedStamp ?: return
+        val page = selectedStampPage
+        val before = stampsOf(page)
+        if (st !in before) return
+        val recolored = Stamp(st.text, st.x, st.y, st.size, color)
+        stamps[page] = before.map { if (it === st) recolored else it }
+        selectedStamp = recolored
+        pushUndo(EditAction.StampSnapshot(page, before, stamps[page]!!))
+    }
+
 
     val currentColor: Int
         get() = if (tool == InkTool.HIGHLIGHTER) highlightColor else penColor
@@ -127,7 +271,21 @@ class AnnotationController(
 
     fun setColor(color: Int) {
         if (tool == InkTool.HIGHLIGHTER) highlightColor = color else penColor = color
+        if (tool == InkTool.STAMP) recolorSelectedStamp(color)
     }
+
+    /** Farba z kolieska: nastaví ju a zapamätá medzi poslednými (max. 8). */
+    fun pickCustomColor(color: Int) {
+        setColor(color)
+        val presets = if (tool == InkTool.HIGHLIGHTER) HIGHLIGHT_COLORS else PEN_COLORS
+        if (color in presets) return
+        recentColors.remove(color)
+        recentColors.add(0, color)
+        while (recentColors.size > 8) recentColors.removeAt(recentColors.lastIndex)
+    }
+
+    val widthRange: ClosedFloatingPointRange<Float>
+        get() = if (tool == InkTool.HIGHLIGHTER) HIGHLIGHT_WIDTH_RANGE else PEN_WIDTH_RANGE
 
     fun setWidth(width: Float) {
         if (tool == InkTool.HIGHLIGHTER) highlightWidth = width else penWidth = width
@@ -141,9 +299,11 @@ class AnnotationController(
     }
 
     private var eraseBefore: MutableMap<Int, List<InkStroke>>? = null
+    private var eraseStampsBefore: MutableMap<Int, List<Stamp>>? = null
 
     fun beginErase() {
         eraseBefore = mutableMapOf()
+        eraseStampsBefore = mutableMapOf()
     }
 
     /**
@@ -152,6 +312,18 @@ class AnnotationController(
      * [ratio] = šírka/výška strany.
      */
     fun eraseAt(page: Int, x0: Float, y0: Float, x1: Float, y1: Float, ratio: Float) {
+        // pečiatky, ktorých stredu sa guma dotkla
+        val pageStamps = stampsOf(page)
+        if (pageStamps.isNotEmpty()) {
+            val rr = eraserSize / 2f
+            val hit = pageStamps.filter { st ->
+                distToSegment(st.x, st.y / ratio, x0, y0 / ratio, x1, y1 / ratio) <= rr + st.size * 0.4f
+            }
+            if (hit.isNotEmpty()) {
+                eraseStampsBefore?.getOrPut(page) { pageStamps }
+                stamps[page] = pageStamps - hit.toSet()
+            }
+        }
         val strokes = strokesOf(page)
         if (strokes.isEmpty()) return
         val r = eraserSize / 2f
@@ -174,10 +346,13 @@ class AnnotationController(
 
     fun endErase() {
         val before = eraseBefore ?: return
+        val stampsBefore = eraseStampsBefore.orEmpty()
         eraseBefore = null
+        eraseStampsBefore = null
         eraserCursor = null
         eraserCursorPage = -1
-        val actions = before.map { (page, list) -> EditAction.Snapshot(page, list, strokesOf(page)) }
+        val actions: List<EditAction> = before.map { (page, list) -> EditAction.Snapshot(page, list, strokesOf(page)) } +
+            stampsBefore.map { (page, list) -> EditAction.StampSnapshot(page, list, stampsOf(page)) }
         when (actions.size) {
             0 -> Unit
             1 -> pushUndo(actions[0])
@@ -187,13 +362,20 @@ class AnnotationController(
 
     fun clearPage(page: Int) {
         val strokes = strokesOf(page)
-        if (strokes.isEmpty()) return
+        val pageStamps = stampsOf(page)
+        if (strokes.isEmpty() && pageStamps.isEmpty()) return
         pages[page] = emptyList()
-        pushUndo(EditAction.Removed(page, strokes))
+        stamps[page] = emptyList()
+        pushUndo(
+            EditAction.Composite(
+                listOf(EditAction.Removed(page, strokes), EditAction.StampSnapshot(page, pageStamps, emptyList())),
+            ),
+        )
     }
 
     fun undo() {
         clearSelection()
+        selectStamp(-1, null)
         val action = undoStack.removeLastOrNull() ?: return
         apply(action, inverse = true)
         redoStack.addLast(action)
@@ -203,6 +385,7 @@ class AnnotationController(
 
     fun redo() {
         clearSelection()
+        selectStamp(-1, null)
         val action = redoStack.removeLastOrNull() ?: return
         apply(action, inverse = false)
         undoStack.addLast(action)
@@ -233,6 +416,10 @@ class AnnotationController(
                 val list = if (inverse) action.actions.asReversed() else action.actions
                 list.forEach { apply(it, inverse) }
             }
+            is EditAction.StampSnapshot -> {
+                stamps[action.page] = if (inverse) action.before else action.after
+            }
+
         }
     }
 
@@ -253,6 +440,7 @@ class AnnotationController(
 
     fun selectTool(t: InkTool) {
         if (t != InkTool.LASSO) clearSelection()
+        if (t != InkTool.STAMP) selectStamp(-1, null)
         tool = t
     }
 
@@ -353,7 +541,7 @@ class AnnotationController(
 
     private fun saveNow() {
         if (!loaded) return
-        val snapshot = pages.toMap()
+        val snapshot = snapshot()
         ioScope.launch { store.save(pieceId, snapshot) }
     }
 
@@ -368,6 +556,15 @@ class AnnotationController(
         val HIGHLIGHT_WIDTHS = floatArrayOf(0.014f, 0.024f, 0.040f)
         /** Priemery gumy (zlomok šírky strany): malá, stredná, veľká. */
         val ERASER_SIZES = floatArrayOf(0.012f, 0.028f, 0.06f)
+
+        /** Rozsahy posuvníkov hrúbky (zlomok šírky strany). */
+        val PEN_WIDTH_RANGE = 0.0012f..0.014f
+        val HIGHLIGHT_WIDTH_RANGE = 0.008f..0.07f
+        val ERASER_RANGE = 0.006f..0.12f
+
+        /** Veľkosti pečiatok (výška písma ako zlomok šírky strany). */
+        val STAMP_SIZES = floatArrayOf(0.022f, 0.032f, 0.048f)
+        val STAMP_RANGE = 0.014f..0.08f
 
         /**
          * Vráti null, ak sa guma ťahu nedotkla; inak zoznam kúskov, ktoré po zmazaní ostanú

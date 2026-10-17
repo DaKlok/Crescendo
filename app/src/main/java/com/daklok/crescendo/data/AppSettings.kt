@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -84,6 +85,21 @@ data class AppSettings(
     /** Jemné vibrácie pri ťuknutiach a prepínačoch. */
     val haptics: Boolean = true,
 
+    // Pedále
+    /** Naučené klávesy Bluetooth pedála (Android keyCode, 0 = len predvolené šípky/PageUp/PageDown). */
+    val pedalNextKey: Int = 0,
+    val pedalPrevKey: Int = 0,
+    /** Pedál klavíra cez MIDI (USB kábel alebo Bluetooth MIDI). */
+    val midiEnabled: Boolean = false,
+    /** MIDI Control Change pedála: 64 = sustain, 66 = sostenuto, 67 = soft (−1 = nepoužité). */
+    val midiNextCc: Int = 67,
+    val midiPrevCc: Int = 66,
+    /** Stranu otočí až dvojité stlačenie – pedál sa dá bežne používať pri hraní. */
+    val midiDoublePress: Boolean = false,
+    /** Adresa naposledy pripojeného Bluetooth MIDI klavíra (automatické pripojenie). */
+    val midiBtAddress: String = "",
+    val midiBtName: String = "",
+
     // Záloha na Google Drive
     /** E-mail pripojeného Google účtu ("" = nepripojený). */
     val backupEmail: String = "",
@@ -123,6 +139,14 @@ class SettingsRepository(private val context: Context) {
         val finger = booleanPreferencesKey("finger")
         val toolbarPos = stringPreferencesKey("toolbar_pos")
         val haptics = booleanPreferencesKey("haptics")
+        val pedalNext = intPreferencesKey("pedal_next")
+        val pedalPrev = intPreferencesKey("pedal_prev")
+        val midiEnabled = booleanPreferencesKey("midi_enabled")
+        val midiNext = intPreferencesKey("midi_next")
+        val midiPrev = intPreferencesKey("midi_prev")
+        val midiDouble = booleanPreferencesKey("midi_double")
+        val midiBtAddress = stringPreferencesKey("midi_bt_addr")
+        val midiBtName = stringPreferencesKey("midi_bt_name")
         val backupEmail = stringPreferencesKey("backup_email")
         val autoBackup = booleanPreferencesKey("auto_backup")
         val lastBackupAt = longPreferencesKey("last_backup_at")
@@ -159,6 +183,14 @@ class SettingsRepository(private val context: Context) {
             prefs[K.finger] = updated.fingerDrawing
             prefs[K.toolbarPos] = updated.toolbarPosition.name
             prefs[K.haptics] = updated.haptics
+            prefs[K.pedalNext] = updated.pedalNextKey
+            prefs[K.pedalPrev] = updated.pedalPrevKey
+            prefs[K.midiEnabled] = updated.midiEnabled
+            prefs[K.midiNext] = updated.midiNextCc
+            prefs[K.midiPrev] = updated.midiPrevCc
+            prefs[K.midiDouble] = updated.midiDoublePress
+            prefs[K.midiBtAddress] = updated.midiBtAddress
+            prefs[K.midiBtName] = updated.midiBtName
             prefs[K.backupEmail] = updated.backupEmail
             prefs[K.autoBackup] = updated.autoBackup
             prefs[K.lastBackupAt] = updated.lastBackupAt
@@ -194,6 +226,14 @@ class SettingsRepository(private val context: Context) {
             fingerDrawing = this[K.finger] ?: d.fingerDrawing,
             toolbarPosition = enumOr(this[K.toolbarPos], d.toolbarPosition),
             haptics = this[K.haptics] ?: d.haptics,
+            pedalNextKey = this[K.pedalNext] ?: d.pedalNextKey,
+            pedalPrevKey = this[K.pedalPrev] ?: d.pedalPrevKey,
+            midiEnabled = this[K.midiEnabled] ?: d.midiEnabled,
+            midiNextCc = this[K.midiNext] ?: d.midiNextCc,
+            midiPrevCc = this[K.midiPrev] ?: d.midiPrevCc,
+            midiDoublePress = this[K.midiDouble] ?: d.midiDoublePress,
+            midiBtAddress = this[K.midiBtAddress] ?: d.midiBtAddress,
+            midiBtName = this[K.midiBtName] ?: d.midiBtName,
             backupEmail = this[K.backupEmail] ?: d.backupEmail,
             autoBackup = this[K.autoBackup] ?: d.autoBackup,
             lastBackupAt = this[K.lastBackupAt] ?: d.lastBackupAt,

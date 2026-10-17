@@ -439,3 +439,11 @@ fun NotificationHost(notifier: Notifier, modifier: Modifier = Modifier) {
         }
     }
 }
+
+
+/**
+ * Úzka obrazovka (mobil na výšku, šírka pod 600 dp). Tablet ostáva bez zmeny –
+ * kompaktné rozloženie sa použije len tam, kde sa bežné nezmestí.
+ */
+@Composable
+fun isCompactWidth(): Boolean = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600

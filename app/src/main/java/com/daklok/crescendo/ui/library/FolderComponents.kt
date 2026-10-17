@@ -1,5 +1,21 @@
 package com.daklok.crescendo.ui.library
 
+import com.daklok.crescendo.ui.common.contentColorFor
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.combinedClickable
 import com.daklok.crescendo.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -61,29 +77,56 @@ fun FolderCard(
     itemCount: Int,
     onOpen: () -> Unit,
     onRename: () -> Unit,
+    onColor: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onSelect: () -> Unit = {},
 ) {
     val haptic = rememberHaptic()
     var menuOpen by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
-    Card(
-        onClick = {
-            haptic(HapticFeedbackType.TextHandleMove)
-            onOpen()
+    val scheme = MaterialTheme.colorScheme
+    val tint = folder.color?.let { Color(it) }
+    val container by animateColorAsState(
+        when {
+            selected -> scheme.secondaryContainer
+            tint != null -> lerp(scheme.surfaceContainerHigh, tint, 0.16f)
+            else -> scheme.surfaceContainerHigh
         },
-        interactionSource = interaction,
-        modifier = modifier.pressScale(interaction),
+        tween(250),
+        label = "folderBg",
+    )
+    Card(
+        modifier = modifier
+            .pressScale(interaction)
+            .selectedLook(selected)
+            .clip(RoundedCornerShape(24.dp))
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                onClick = {
+                    haptic(HapticFeedbackType.TextHandleMove)
+                    if (selectionMode) onSelect() else onOpen()
+                },
+                onLongClick = {
+                    haptic(HapticFeedbackType.LongPress)
+                    onSelect()
+                },
+            ),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(containerColor = container),
     ) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
+            modifier = Modifier
+                .heightIn(min = 76.dp)
+                .padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            IconBadge(Icons.Outlined.Folder, active = itemCount > 0)
+            FolderBadge(color = folder.color, active = itemCount > 0)
             Column(Modifier.weight(1f)) {
                 Text(
                     folder.name,
@@ -98,36 +141,79 @@ fun FolderCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Box {
-                IconButton(onClick = {
-                    haptic(HapticFeedbackType.TextHandleMove)
-                    menuOpen = true
-                }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.more))
-                }
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                    shape = RoundedCornerShape(16.dp),
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                SelectionCheck(visible = selectionMode, checked = selected)
+                // plný názov: v Box vnútri Row by sa inak vybralo RowScope.AnimatedVisibility
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !selectionMode,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut(),
                 ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.rename)) },
-                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                        onClick = { menuOpen = false; onRename() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.move)) },
-                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) },
-                        onClick = { menuOpen = false; onMove() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.remove_folder)) },
-                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                        onClick = { menuOpen = false; onDelete() },
-                    )
+                    Box {
+                        IconButton(onClick = {
+                            haptic(HapticFeedbackType.TextHandleMove)
+                            menuOpen = true
+                        }) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.more))
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.rename)) },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                onClick = { menuOpen = false; onRename() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.folder_color)) },
+                                leadingIcon = { Icon(Icons.Outlined.Palette, null) },
+                                onClick = { menuOpen = false; onColor() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.move)) },
+                                leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) },
+                                onClick = { menuOpen = false; onMove() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.remove_folder)) },
+                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                onClick = { menuOpen = false; onDelete() },
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** Ikona priečinka vo farbe priečinka (alebo vo farbe témy). */
+@Composable
+fun FolderBadge(color: Int?, active: Boolean, size: Dp = 46.dp) {
+    val scheme = MaterialTheme.colorScheme
+    val bg by animateColorAsState(
+        when {
+            color != null -> Color(color)
+            active -> scheme.primary
+            else -> scheme.outline.copy(alpha = 0.22f)
+        },
+        tween(260),
+        label = "folderBadge",
+    )
+    val fg = when {
+        color != null -> contentColorFor(color)
+        active -> scheme.onPrimary
+        else -> scheme.onSurfaceVariant
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(bg, RoundedCornerShape(size * 0.3f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Outlined.Folder, contentDescription = null, tint = fg, modifier = Modifier.size(size * 0.5f))
     }
 }
 
@@ -202,6 +288,7 @@ fun MoveToFolderDialog(
                         name = folder.name,
                         depth = depth + 1,
                         isRoot = false,
+                        color = folder.color,
                         selected = currentLocation == folder.id,
                         onClick = { onSelect(folder.id) },
                     )
@@ -220,6 +307,7 @@ private fun DestinationRow(
     isRoot: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
+    color: Int? = null,
 ) {
     Row(
         modifier = Modifier
@@ -231,7 +319,7 @@ private fun DestinationRow(
         Icon(
             if (isRoot) Icons.Outlined.LibraryMusic else Icons.Outlined.Folder,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = color?.let { Color(it) } ?: MaterialTheme.colorScheme.primary,
         )
         Box(Modifier.width(12.dp))
         Text(

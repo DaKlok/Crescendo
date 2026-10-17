@@ -1,5 +1,9 @@
 package com.daklok.crescendo
 
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import com.daklok.crescendo.ui.setlist.SetlistsScreen
+import com.daklok.crescendo.ui.setlist.SetlistViewModel
 import kotlinx.coroutines.delay
 import com.daklok.crescendo.ui.common.OverlayKind
 import com.daklok.crescendo.ui.common.AppOverlayHost
@@ -50,7 +54,14 @@ import com.daklok.crescendo.ui.theme.CrescendoTheme
 private sealed interface Route {
     data object Library : Route
     /** [nonce] zaručí novú inštanciu ViewModelu pri každom otvorení (čerstvá posledná strana). */
-    data class Reader(val pieceId: Long, val nonce: Long = System.nanoTime()) : Route
+    data class Reader(
+        val pieceId: Long,
+        val nonce: Long = System.nanoTime(),
+        /** Ak je skladba otvorená zo setlistu: ID setlistu a poradie v ňom. */
+        val setlistId: Long? = null,
+        val setlistIndex: Int = 0,
+    ) : Route
+    data object Setlists : Route
 }
 
 class MainActivity : ComponentActivity() {
@@ -132,7 +143,14 @@ private fun CrescendoNav(
     AnimatedContent(
         targetState = route,
         transitionSpec = {
-            if (targetState is Route.Reader) {
+            val from = initialState
+            val to = targetState
+            if (from is Route.Reader && to is Route.Reader && to.setlistId != null) {
+                // ďalšia / predchádzajúca skladba v setliste: posun do strany
+                val dir = if (to.setlistIndex >= from.setlistIndex) 1 else -1
+                (fadeIn(tween(260)) + slideInHorizontally(Motion.gentle()) { dir * it / 3 }) togetherWith
+                    (fadeOut(tween(200)) + slideOutHorizontally(tween(260)) { -dir * it / 4 })
+            } else if (targetState is Route.Reader || targetState is Route.Setlists && initialState is Route.Library) {
                 // otvorenie skladby: čítačka pružne „vyrastie“, knižnica ustúpi do pozadia
                 (fadeIn(tween(260)) + scaleIn(initialScale = 0.92f, animationSpec = Motion.gentle())) togetherWith
                     (fadeOut(tween(200)) + scaleOut(targetScale = 1.04f, animationSpec = tween(260)))
@@ -149,18 +167,52 @@ private fun CrescendoNav(
                 vm = libraryVm,
                 onOpenPiece = { route = Route.Reader(it) },
                 onOpenSettings = { showSettings = true },
+                onOpenSetlists = { route = Route.Setlists },
             )
+            Route.Setlists -> {
+                val vm: SetlistViewModel = viewModel(
+                    key = "setlists",
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                            SetlistViewModel(app.setlists, app.library) as T
+                    },
+                )
+                SetlistsScreen(
+                    vm = vm,
+                    onBack = { route = Route.Library },
+                    onPlay = { setlistId, index, pieceId ->
+                        route = Route.Reader(pieceId, setlistId = setlistId, setlistIndex = index)
+                    },
+                )
+            }
             is Route.Reader -> {
                 val vm: ReaderViewModel = viewModel(
                     key = "reader-${r.pieceId}-${r.nonce}",
                     factory = object : ViewModelProvider.Factory {
                         @Suppress("UNCHECKED_CAST")
                         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                            ReaderViewModel(app.library, app.settings, app.annotations, r.pieceId) as T
+                            ReaderViewModel(
+                                library = app.library,
+                                settingsRepo = app.settings,
+                                annotationStore = app.annotations,
+                                pieceId = r.pieceId,
+                                setlists = app.setlists,
+                                setlistId = r.setlistId,
+                                setlistIndex = r.setlistIndex,
+                                fromStart = r.setlistId != null,
+                            ) as T
                     },
                 )
                 DisposableEffect(vm) { onDispose { vm.release() } }
-                ReaderScreen(vm = vm, onBack = { route = Route.Library })
+                ReaderScreen(
+                    vm = vm,
+                    // zo setlistu sa vraciame do setlistov, inak do knižnice
+                    onBack = { route = if (r.setlistId != null) Route.Setlists else Route.Library },
+                    onOpenSetlistEntry = { index, pieceId ->
+                        route = Route.Reader(pieceId, setlistId = r.setlistId, setlistIndex = index)
+                    },
+                )
             }
         }
     }

@@ -85,6 +85,65 @@ fun AnnotationLayer(
                     val w = size.width.toFloat().coerceAtLeast(1f)
                     val h = size.height.toFloat().coerceAtLeast(1f)
 
+                    // ── pečiatka: ťuk = položiť / vybrať, ťahanie = presun ──
+                    if (tool == InkTool.STAMP) {
+                        down.consume()
+                        val sx0 = down.position.x / w
+                        val sy0 = down.position.y / h
+                        val hit = controller.stampAt(page, sx0, sy0, ratio)
+                        if (hit != null) {
+                            controller.draggedStamp = hit
+                            controller.dragDx = 0f
+                            controller.dragDy = 0f
+                        }
+                        var moved = false
+                        var cancelled = false
+                        var lastPos = down.position
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (!isPen && event.changes.count { it.pressed } > 1) {
+                                    cancelled = true
+                                    break
+                                }
+                                val c = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!c.pressed) {
+                                    c.consume()
+                                    break
+                                }
+                                val dist = (c.position - down.position).getDistance()
+                                if (dist > 10f * density) moved = true
+                                if (hit != null && moved) {
+                                    controller.dragDx = (c.position.x - down.position.x) / w
+                                    controller.dragDy = (c.position.y - down.position.y) / h
+                                }
+                                lastPos = c.position
+                                c.consume()
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            // gesto prerušené (napr. zatvorenie panela) – nič neumiestňujeme
+                            cancelled = true
+                            throw e
+                        } finally {
+                            val ex = lastPos.x / w
+                            val ey = lastPos.y / h
+                            if (!cancelled) {
+                                when {
+                                    hit != null && moved -> controller.moveStamp(page, hit, controller.dragDx, controller.dragDy)
+                                    // ťuk na pečiatku ju vyberie (veľkosť, farba, zmazanie v paneli)
+                                    hit != null -> controller.selectStamp(page, hit)
+                                    // ťuk vedľa pri vybranej pečiatke len zruší výber
+                                    controller.selectedStamp != null -> controller.selectStamp(-1, null)
+                                    !moved -> controller.placeStamp(page, ex, ey)
+                                }
+                            }
+                            controller.draggedStamp = null
+                            controller.dragDx = 0f
+                            controller.dragDy = 0f
+                        }
+                        return@awaitEachGesture
+                    }
+
                     fun pressureOf(p: Float) = if (isPen) p.coerceIn(0.1f, 1f) else 0.5f
 
                     down.consume()
@@ -242,6 +301,7 @@ fun AnnotationLayer(
     ) {
         // uložené ťahy (vybrané sa posúvajú spolu s prstom/perom)
         val strokes = controller.pages[page] ?: emptyList()
+        val pageStamps = controller.stamps[page] ?: emptyList()
         Canvas(Modifier.fillMaxSize()) {
             val sel = if (controller.selectionPage == page) controller.selection else emptySet()
             val dx = controller.moveDx * size.width
@@ -253,6 +313,12 @@ fun AnnotationLayer(
                 } else {
                     drawInk(s, cache)
                 }
+            }
+            // pečiatky (ťahaná sa posúva s prstom)
+            val dragged = controller.draggedStamp
+            pageStamps.forEach { st ->
+                if (st === dragged) drawStamp(st, controller.dragDx * size.width, controller.dragDy * size.height)
+                else drawStamp(st)
             }
         }
         // ťah / lasso / tvar, ktorý sa práve kreslí + rámik výberu
@@ -287,6 +353,25 @@ fun AnnotationLayer(
                     radius = rad,
                     center = c,
                     style = Stroke(width = 1.5f * density),
+                )
+            }
+            // rámik okolo vybranej pečiatky
+            val selStamp = controller.selectedStamp
+            if (selStamp != null && controller.selectedStampPage == page && controller.draggedStamp == null) {
+                val chars = if (selStamp.text.startsWith("§")) 2 else selStamp.text.length.coerceAtLeast(1)
+                val hw = selStamp.size * size.width * (0.35f * chars).coerceIn(0.6f, 6f) + 6f * density
+                val hh = selStamp.size * size.width * 0.7f + 6f * density
+                val cx = selStamp.x * size.width
+                val cy = selStamp.y * size.height
+                drawRoundRect(
+                    color = accent,
+                    topLeft = Offset(cx - hw, cy - hh),
+                    size = Size(hw * 2, hh * 2),
+                    cornerRadius = CornerRadius(8f * density),
+                    style = Stroke(
+                        width = 2f * density,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f * density, 7f * density)),
+                    ),
                 )
             }
             if (controller.selectionPage == page) {

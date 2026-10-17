@@ -2,6 +2,7 @@ package com.daklok.crescendo.ui.library
 
 import com.daklok.crescendo.R
 import android.app.Application
+import com.daklok.crescendo.CrescendoApp
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -44,6 +45,12 @@ data class LibraryUiState(
     val loaded: Boolean = false,
 )
 
+/** Vybrané položky v režime výberu (dlhé podržanie). */
+data class Selection(val pieces: Set<Long> = emptySet(), val folders: Set<Long> = emptySet()) {
+    val active: Boolean get() = pieces.isNotEmpty() || folders.isNotEmpty()
+    val count: Int get() = pieces.size + folders.size
+}
+
 /** Hlásenie pre plávajúcu notifikáciu. */
 data class UiMessage(val text: String, val error: Boolean = false)
 
@@ -65,11 +72,31 @@ class LibraryViewModel(
     private val importing = MutableStateFlow(0)
     private val currentFolderId = MutableStateFlow<Long?>(null)
 
+    private val _selection = MutableStateFlow(Selection())
+    val selection: StateFlow<Selection> = _selection
+
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
     private fun say(text: String, error: Boolean = false) {
         _messages.tryEmit(UiMessage(text, error))
+    }
+
+    private val setlistRepo = (app as CrescendoApp).setlists
+
+    /** Setlisty (pre dialóg „Pridať do setlistu“). */
+    val setlists = setlistRepo.observeSetlists()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Pridá skladby do setlistu; ak [newName] nie je null, najprv vytvorí nový setlist. */
+    fun addToSetlist(pieceIds: List<Long>, setlistId: Long?, newName: String? = null) {
+        if (pieceIds.isEmpty()) return
+        viewModelScope.launch {
+            val target = setlistId ?: newName?.trim()?.takeIf { it.isNotEmpty() }?.let { setlistRepo.create(it) } ?: return@launch
+            setlistRepo.addPieces(target, pieceIds)
+            val name = setlistRepo.get(target)?.name ?: ""
+            say(app.getString(R.string.msg_added_to_setlist, pieceIds.size, name))
+        }
     }
 
     val settings: StateFlow<AppSettings> = settingsRepo.settings
@@ -138,18 +165,90 @@ class LibraryViewModel(
 
     // ---- navigácia ----
 
-    fun openFolder(id: Long?) = currentFolderId.update { id }
+    fun openFolder(id: Long?) {
+        clearSelection()
+        currentFolderId.update { id }
+    }
 
     /** O úroveň vyššie; vráti false, ak už sme v knižnici. */
     fun goUp(): Boolean {
         val current = state.value.currentFolder ?: return false
+        clearSelection()
         currentFolderId.update { current.parentId }
         return true
     }
 
-    fun setQuery(q: String) = query.update { q }
+    fun setQuery(q: String) {
+        clearSelection()
+        query.update { q }
+    }
 
-    fun setFavoritesOnly(value: Boolean) = favoritesOnly.update { value }
+    fun setFavoritesOnly(value: Boolean) {
+        clearSelection()
+        favoritesOnly.update { value }
+    }
+
+    // ---- výber viacerých položiek ----
+
+    fun togglePiece(id: Long) = _selection.update {
+        it.copy(pieces = if (id in it.pieces) it.pieces - id else it.pieces + id)
+    }
+
+    fun toggleFolder(id: Long) = _selection.update {
+        it.copy(folders = if (id in it.folders) it.folders - id else it.folders + id)
+    }
+
+    fun clearSelection() = _selection.update { Selection() }
+
+    /** Vyberie všetko, čo je práve zobrazené; ak už je všetko vybrané, výber zruší. */
+    fun selectAll() {
+        val s = state.value
+        val all = Selection(s.pieces.map { it.id }.toSet(), s.folders.map { it.id }.toSet())
+        _selection.update { if (it == all) Selection() else all }
+    }
+
+    /** Priečinky, kam sa výber nesmie presunúť (vybrané priečinky a ich podpriečinky). */
+    fun selectionExcluded(): Set<Long> =
+        _selection.value.folders.flatMap { descendantsOf(it) }.toSet()
+
+    fun moveSelected(target: Long?) {
+        val sel = _selection.value
+        val excluded = selectionExcluded()
+        if (target != null && target in excluded) return
+        viewModelScope.launch {
+            sel.pieces.forEach { library.movePiece(it, target) }
+            sel.folders.forEach { library.moveFolder(it, target) }
+            clearSelection()
+            say(app.getString(R.string.msg_moved_n, sel.count, folderName(target)))
+        }
+    }
+
+    fun deleteSelected() {
+        val sel = _selection.value
+        val pieces = state.value.pieces.filter { it.id in sel.pieces }
+        val folders = state.value.allFolders.filter { it.id in sel.folders }
+        viewModelScope.launch {
+            pieces.forEach { library.delete(it) }
+            // priečinky od najhlbšieho, aby sa obsah presúval správne o úroveň vyššie
+            folders.sortedByDescending { depthOf(it) }.forEach { f ->
+                val fresh = library.getFolder(f.id) ?: return@forEach
+                library.deleteFolder(fresh)
+            }
+            clearSelection()
+            say(app.getString(R.string.msg_deleted_n, sel.count))
+        }
+    }
+
+    private fun depthOf(folder: FolderEntity): Int {
+        val byId = state.value.allFolders.associateBy { it.id }
+        var d = 0
+        var p = folder.parentId
+        while (p != null && d < 64) {
+            d++
+            p = byId[p]?.parentId
+        }
+        return d
+    }
 
     fun setSort(sort: LibrarySort) {
         viewModelScope.launch { settingsRepo.update { it.copy(sort = sort) } }
@@ -185,6 +284,21 @@ class LibraryViewModel(
                 else -> say(app.getString(R.string.msg_import_failed), error = true)
             }
             firstId?.let { onFirstImported?.invoke(it) }
+        }
+    }
+
+    /** Import naskenovaného PDF (zo skenera) s vlastným názvom do aktuálneho priečinka. */
+    fun importScan(uri: Uri, title: String, onImported: (Long) -> Unit = {}) {
+        val target = state.value.currentFolder?.id
+        viewModelScope.launch {
+            importing.update { it + 1 }
+            library.importPdf(uri, target, title.trim())
+                .onSuccess { id ->
+                    say(app.getString(R.string.msg_piece_added))
+                    onImported(id)
+                }
+                .onFailure { say(app.getString(R.string.msg_import_failed), error = true) }
+            importing.update { it - 1 }
         }
     }
 
@@ -237,6 +351,10 @@ class LibraryViewModel(
         }
     }
 
+    fun setFolderColor(folder: FolderEntity, color: Int?) {
+        viewModelScope.launch { library.setFolderColor(folder.id, color) }
+    }
+
     fun deleteFolder(folder: FolderEntity) {
         viewModelScope.launch {
             library.deleteFolder(folder)
@@ -266,4 +384,8 @@ class LibraryViewModel(
         id?.let { fid -> state.value.allFolders.firstOrNull { it.id == fid }?.name } ?: app.getString(R.string.library)
 
     fun thumbFile(piece: PieceEntity) = library.thumbFile(piece)
+
+    fun pdfFile(piece: PieceEntity) = library.pdfFile(piece)
+
+    suspend fun loadAnnotations(pieceId: Long) = (app as CrescendoApp).annotations.load(pieceId)
 }

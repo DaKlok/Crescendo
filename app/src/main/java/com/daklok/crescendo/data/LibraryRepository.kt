@@ -20,6 +20,7 @@ class LibraryRepository(
     private val context: Context,
     private val dao: PieceDao,
     private val folderDao: FolderDao,
+    private val setlistDao: SetlistDao,
 ) {
     private val pdfDir = File(context.filesDir, "pdfs").apply { mkdirs() }
     private val thumbDir = File(context.filesDir, "thumbs").apply { mkdirs() }
@@ -35,6 +36,8 @@ class LibraryRepository(
 
     suspend fun renameFolder(id: Long, name: String) = folderDao.rename(id, name)
 
+    suspend fun setFolderColor(id: Long, color: Int?) = folderDao.setColor(id, color)
+
     suspend fun moveFolder(id: Long, parentId: Long?) = folderDao.setParent(id, parentId)
 
     /** Zruší priečinok; jeho skladby aj podpriečinky sa presunú o úroveň vyššie (nič sa nestratí). */
@@ -46,6 +49,8 @@ class LibraryRepository(
 
     suspend fun movePiece(id: Long, folderId: Long?) = dao.moveToFolder(id, folderId)
 
+    suspend fun getFolder(id: Long): FolderEntity? = folderDao.getById(id)
+
     suspend fun getPiece(id: Long): PieceEntity? = dao.getById(id)
 
     fun pdfFile(piece: PieceEntity): File = File(pdfDir, piece.fileName)
@@ -56,7 +61,7 @@ class LibraryRepository(
      * Skopíruje PDF do interného úložiska, vytvorí náhľad prvej strany a uloží záznam.
      * Vráti ID novej skladby, alebo chybu (nie je to PDF / je chránené heslom...).
      */
-    suspend fun importPdf(uri: Uri, folderId: Long? = null): Result<Long> = withContext(Dispatchers.IO) {
+    suspend fun importPdf(uri: Uri, folderId: Long? = null, title: String? = null): Result<Long> = withContext(Dispatchers.IO) {
         val id = UUID.randomUUID().toString()
         val target = File(pdfDir, "$id.pdf")
         try {
@@ -84,7 +89,8 @@ class LibraryRepository(
             }
 
             val piece = PieceEntity(
-                title = displayName(uri)?.removeSuffix(".pdf")?.removeSuffix(".PDF")
+                title = title?.takeIf { it.isNotBlank() }
+                    ?: displayName(uri)?.removeSuffix(".pdf")?.removeSuffix(".PDF")
                     ?: context.getString(R.string.piece_default_title),
                 fileName = target.name,
                 thumbName = thumbName,
@@ -100,6 +106,7 @@ class LibraryRepository(
 
     suspend fun delete(piece: PieceEntity) = withContext(Dispatchers.IO) {
         dao.delete(piece)
+        setlistDao.deleteItemsForPiece(piece.id)
         pdfFile(piece).delete()
         thumbFile(piece)?.delete()
         File(context.filesDir, "annotations/${piece.id}.json").delete()

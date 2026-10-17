@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name" translatable="false">Crescendo</string>
     <string name="about">About</string>
+    <string name="add_to_setlist">Add to setlist</string>
     <string name="all_count">All · %1$d</string>
     <string name="annotations">Annotations</string>
     <string name="appearance">Appearance</string>
@@ -46,17 +47,26 @@
     <string name="camera_preview">Camera preview</string>
     <string name="camera_preview_desc">Small window with a head-angle indicator</string>
     <string name="cancel">Cancel</string>
+    <string name="cancel_selection">Cancel selection</string>
     <string name="choose">Choose</string>
     <string name="clear_annotations_text">All annotations on the displayed page will be deleted. You can bring them back with Undo.</string>
     <string name="clear_annotations_title">Clear annotations?</string>
     <string name="clear_page_annotations">Clear annotations on page</string>
     <string name="close">Close</string>
     <string name="close_annotations">Close annotations</string>
+    <string name="color_brightness">Brightness</string>
+    <string name="color_default">Default</string>
+    <string name="color_hex">Hex code</string>
     <string name="continue_reading">CONTINUE READING</string>
     <string name="cooldown">Pause after turning</string>
     <string name="create">Create</string>
     <string name="current_location">Current location</string>
+    <string name="custom_color">Custom color…</string>
+    <string name="custom_colors">Your colors</string>
+    <string name="custom_hint">For each gesture choose what it does: nothing, previous page or next page.</string>
     <string name="delete">Delete</string>
+    <string name="delete_n_folders_text">Selected folders will be removed; their contents move one level up, nothing is lost.</string>
+    <string name="delete_n_pieces_text">Selected pieces will be removed from the library together with their annotations.</string>
     <string name="delete_piece_text">“%1$s” will be removed from the library together with its annotations.</string>
     <string name="delete_piece_title">Remove piece?</string>
     <string name="disconnect">Disconnect</string>
@@ -71,15 +81,25 @@
     <string name="error_pdf_open">Couldn’t open the PDF</string>
     <string name="error_piece_not_found">Piece not found</string>
     <string name="error_title">Error</string>
+    <string name="export_desc">“%1$s” will be saved as a new PDF including all your annotations. The original stays unchanged.</string>
+    <string name="export_failed">Couldn’t create the PDF</string>
     <string name="export_file">Save backup to file</string>
     <string name="export_file_desc">Sheet music, annotations, folders and settings in one ZIP file</string>
+    <string name="export_pdf">Export PDF</string>
+    <string name="export_save">Save to file</string>
+    <string name="export_saved">PDF saved</string>
+    <string name="export_share">Share</string>
+    <string name="export_title">Export with annotations</string>
+    <string name="export_working">Creating PDF…</string>
     <string name="favorite_add">Add to favorites</string>
     <string name="favorite_remove">Remove from favorites</string>
     <string name="favorites">Favorites</string>
+    <string name="folder_color">Color</string>
+    <string name="folder_color_title">Color of “%1$s”</string>
     <string name="folder_empty">Empty</string>
     <string name="folder_is_empty">This folder is empty. Import a PDF or move pieces here from the ⋮ menu on a card.</string>
     <string name="folders">Folders</string>
-    <string name="fullscreen">Fullscreen</string>
+    <string name="fullscreen">Performance mode</string>
     <string name="g_nod">Nod</string>
     <string name="g_nod_desc">Down = next, up = back</string>
     <string name="g_smile">Smile</string>
@@ -91,15 +111,19 @@
     <string name="g_wink">Wink</string>
     <string name="g_wink_desc">Right eye = next, left eye = back. Normal blinking is ignored.</string>
     <string name="general">General</string>
+    <string name="gesture_none">nothing</string>
     <string name="gesture_settings">Gesture settings</string>
+    <string name="gesture_summary">Next: %1$s · Back: %2$s</string>
     <string name="gestures">Gestures</string>
     <string name="gestures_desc">Tap the gestures that should turn to the next or previous page. Mix and match freely.</string>
     <string name="haptics">Haptic feedback</string>
     <string name="haptics_desc">Gentle vibrations on taps</string>
     <string name="head_tracking">Head turning</string>
-    <string name="head_tracking_desc">Turn your head right = next page. The camera is processed only on your device.</string>
+    <string name="head_tracking_desc">Turn pages with head or face gestures. The camera is processed only on your device.</string>
     <string name="head_tracking_switch">Head tracking</string>
+    <string name="highlighter_color">Highlighter color</string>
     <string name="hold_time">Hold time</string>
+    <string name="how_to_turn">How to turn pages</string>
     <string name="import_file">Restore from file</string>
     <string name="import_file_desc">Replaces everything in the app with the selected backup</string>
     <string name="import_here">Import here</string>
@@ -115,13 +139,37 @@
     <string name="library">Library</string>
     <string name="library_empty_text">Import PDFs with sheet music and they’ll be right at hand. Files stay only on your device.</string>
     <string name="library_empty_title">Your library is empty</string>
+    <string name="metronome">Metronome</string>
+    <string name="metronome_sound">Sound on/off</string>
+    <string name="metronome_start">Start</string>
+    <string name="metronome_stop">Stop</string>
+    <string name="metronome_tap">Tap tempo</string>
+    <string name="midi_bt_change">Bluetooth: %1$s (change)</string>
+    <string name="midi_bt_connect">Connect via Bluetooth MIDI</string>
+    <string name="midi_bt_failed">Couldn’t connect</string>
+    <string name="midi_bt_off">Bluetooth is turned off</string>
+    <string name="midi_bt_permission">Bluetooth permission is needed to find the piano</string>
+    <string name="midi_bt_scan_hint">Turn on Bluetooth MIDI on your piano. Pianos appear here – don’t pair them in system settings.</string>
+    <string name="midi_bt_searching">Searching…</string>
+    <string name="midi_cable_hint">Cable: connect the piano’s USB (to host) port to the tablet with a USB‑C/OTG cable – it’s detected automatically.</string>
+    <string name="midi_connected">Connected: %1$s</string>
+    <string name="midi_double">Double press</string>
+    <string name="midi_double_desc">Page turns only on two quick presses – the pedal still works normally while playing (recommended for sustain)</string>
+    <string name="midi_not_connected">No instrument connected</string>
     <string name="more">More</string>
+    <string name="more_settings">More settings</string>
+    <string name="more_settings_desc">Camera, timing, preview, vibration, center position</string>
     <string name="move">Move</string>
+    <string name="move_down">Move down</string>
     <string name="move_to">Move to…</string>
     <string name="move_to_folder">Move to folder</string>
+    <string name="move_up">Move up</string>
+    <string name="msg_added_to_setlist">Added to “%2$s” (%1$d)</string>
+    <string name="msg_deleted_n">Items removed: %1$d</string>
     <string name="msg_folder_removed">Folder “%1$s” removed, its contents moved up a level</string>
     <string name="msg_import_failed">Import failed – the file is not a valid PDF or is password-protected</string>
     <string name="msg_import_partial">Added: %1$d, failed: %2$d</string>
+    <string name="msg_moved_n">Moved to: %2$s (%1$d)</string>
     <string name="msg_moved_to">Moved to: %1$s</string>
     <string name="msg_piece_added">Piece added</string>
     <string name="msg_piece_deleted">Piece deleted</string>
@@ -143,12 +191,30 @@
     <string name="page_n">Page %1$d</string>
     <string name="page_x_of_y">Page %1$d of %2$d</string>
     <string name="paper_desc">“Paper” uses warm, matte colors with high contrast – ideal for an NXTPAPER display.</string>
+    <string name="pedal_bt_desc">Pair the pedal in your tablet’s Bluetooth settings. Arrows, Page Up/Down and Space work right away; if your pedal sends other keys, teach them here.</string>
+    <string name="pedal_bt_title">Bluetooth page-turner pedal</string>
+    <string name="pedal_captured">Got it: %1$s</string>
+    <string name="pedal_default_keys">Default (arrows, Page Up/Down, Space)</string>
+    <string name="pedal_learn">Learn</string>
+    <string name="pedal_midi_desc">Turn pages with your digital piano’s pedals – connected by USB cable or Bluetooth MIDI</string>
+    <string name="pedal_midi_title">Piano pedals (MIDI)</string>
+    <string name="pedal_midi_unsupported">This device doesn’t support MIDI</string>
+    <string name="pedal_none">Not used</string>
+    <string name="pedal_press_now">Press the pedal now…</string>
+    <string name="pedal_press_piano">Press the pedal on your piano…</string>
+    <string name="pedal_soft">Soft pedal (left)</string>
+    <string name="pedal_sostenuto">Sostenuto pedal (middle)</string>
+    <string name="pedal_sustain">Sustain pedal (right)</string>
+    <string name="pedals">Pedals</string>
+    <string name="pen_color">Pen color</string>
     <string name="piece_default_title">Piece</string>
     <string name="pieces">Pieces</string>
     <string name="pos_bottom">Bottom</string>
     <string name="pos_left">Left</string>
     <string name="pos_right">Right</string>
     <string name="pos_top">Top</string>
+    <string name="preset_custom">Custom</string>
+    <string name="preset_custom_desc">Choose any gestures for next and previous page</string>
     <string name="preset_one_eye">Left eye only = next</string>
     <string name="preset_tilt">Tilt head</string>
     <string name="preset_turn">Turn head</string>
@@ -174,8 +240,13 @@
     <string name="reverse_direction_desc">Left = next, right = back</string>
     <string name="reverse_scope_desc">For turning, tilting and nodding</string>
     <string name="save">Save</string>
+    <string name="scan_default_name">Scan %1$s</string>
+    <string name="scan_failed">Scanner isn’t available on this device</string>
+    <string name="scan_music">Scan sheet music</string>
+    <string name="scan_name_title">Name of the scanned piece</string>
     <string name="search">Search</string>
     <string name="search_hint">Search the whole library…</string>
+    <string name="select_all">Select all</string>
     <string name="selection_delete">Delete selection</string>
     <string name="selection_duplicate">Duplicate selection</string>
     <string name="sensitivity">Sensitivity (angle)</string>
@@ -183,6 +254,18 @@
     <string name="sensitivity_nod">Nod angle</string>
     <string name="sensitivity_tilt">Tilt angle</string>
     <string name="sensitivity_turn">Turn angle</string>
+    <string name="setlist_add_n">Add (%1$d)</string>
+    <string name="setlist_add_pieces">Add pieces</string>
+    <string name="setlist_delete_text">“%1$s” will be deleted. The pieces stay in your library.</string>
+    <string name="setlist_delete_title">Delete setlist?</string>
+    <string name="setlist_empty">This setlist is empty. Add pieces from your library.</string>
+    <string name="setlist_new">New setlist</string>
+    <string name="setlist_next">Next: %1$s</string>
+    <string name="setlist_play">Play</string>
+    <string name="setlist_remove_item">Remove from setlist</string>
+    <string name="setlists">Setlists</string>
+    <string name="setlists_empty_text">Put pieces in order for a concert, service or rehearsal. While playing, the next piece opens automatically after the last page.</string>
+    <string name="setlists_empty_title">No setlists yet</string>
     <string name="settings">Settings</string>
     <string name="shape_ellipse">Ellipse</string>
     <string name="shape_line">Line</string>
@@ -192,6 +275,12 @@
     <string name="sort_added">Recently added</string>
     <string name="sort_recent">Recently opened</string>
     <string name="sort_title">Title A–Z</string>
+    <string name="stage_mode_exit">Exit</string>
+    <string name="stage_mode_hint">Performance mode</string>
+    <string name="stamp_custom">Custom text</string>
+    <string name="stamp_custom_hint">e.g. breathe, slower, 3×</string>
+    <string name="stamp_delete">Delete stamp</string>
+    <string name="stamp_size">Stamp size</string>
     <string name="support">Support</string>
     <string name="support_desc">If you like the app and want to support its development, you can buy me a coffee ☕</string>
     <string name="swap_eyes">Swap eyes</string>
@@ -208,6 +297,7 @@
     <string name="tool_lasso">Select (lasso)</string>
     <string name="tool_pen">Pen</string>
     <string name="tool_shapes">Shapes</string>
+    <string name="tool_stamp">Stamps</string>
     <string name="toolbar_position">Toolbar position</string>
     <string name="toolbar_position_long">Toolbar position</string>
     <string name="tracking_no_face">Can’t see your face</string>
@@ -234,6 +324,10 @@
     <string name="volume_keys_desc">Volume down = next, volume up = back. Bluetooth page-turner pedals work always.</string>
     <string name="wink_hold">Wink length</string>
     <string name="zoom_reset">%1$d %%  ·  Reset</string>
+    <plurals name="delete_n_title">
+        <item quantity="one">Remove %d item?</item>
+        <item quantity="other">Remove %d items?</item>
+    </plurals>
     <plurals name="items">
         <item quantity="one">%d item</item>
         <item quantity="other">%d items</item>
@@ -241,5 +335,9 @@
     <plurals name="pages">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="selected_n">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
     </plurals>
 </resources>

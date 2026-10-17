@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.outlined.Piano
+import com.daklok.crescendo.ui.common.isCompactWidth
 import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.ui.common.OverlayKind
 import com.daklok.crescendo.ui.common.AppOverlay
@@ -167,7 +169,7 @@ fun SettingsSheet(
                 // panel siaha len do ~90 % výšky obrazovky (ako v Bible Lock Screen)
                 .fillMaxHeight(0.9f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = if (isCompactWidth()) 12.dp else 24.dp)
                 .padding(bottom = 40.dp)
                 .navigationBarsPadding(),
         ) {
@@ -294,6 +296,14 @@ fun SettingsSheet(
             SectionHeader(Icons.Outlined.Face, stringResource(R.string.head_tracking))
             SettingsCard {
                 HeadTrackingSettingsContent(settings = settings, update = { t -> update(t) })
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ── Pedále ──
+            SectionHeader(Icons.Outlined.Piano, stringResource(R.string.pedals))
+            SettingsCard {
+                PedalSettingsContent(settings = settings, update = { t -> update(t) })
             }
 
             Spacer(Modifier.height(24.dp))

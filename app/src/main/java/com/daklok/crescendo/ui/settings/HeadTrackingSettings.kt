@@ -1,5 +1,13 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.outlined.Piano
+import com.daklok.crescendo.ui.common.isCompactWidth
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.outlined.CenterFocusStrong
@@ -142,9 +150,59 @@ fun ColumnScope.HeadTrackingSettingsContent(
             modifier = Modifier.padding(start = 32.dp, top = 2.dp, bottom = 4.dp),
         )
     }
-    run {
-        Column {
-            Divider()
+    Divider()
+    GestureMappingEditor(settings = settings, update = { t -> update(t) })
+    Divider()
+    MoreSettings(settings = settings, update = update)
+}
+
+/** Zbaliteľná časť s menej používanými nastaveniami. */
+@Composable
+private fun MoreSettings(
+    settings: AppSettings,
+    update: ((AppSettings) -> AppSettings) -> Unit,
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (open) 180f else 0f, Motion.bouncy(), label = "chevron")
+    val haptic = rememberHaptic()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable {
+                haptic(HapticFeedbackType.TextHandleMove)
+                open = !open
+            }
+            .padding(vertical = 8.dp),
+    ) {
+        Icon(Icons.Outlined.Tune, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.more_settings),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                stringResource(R.string.more_settings_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            Icons.Outlined.ExpandMore,
+            null,
+            Modifier.rotate(rotation),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    AnimatedVisibility(
+        visible = open,
+        enter = expandVertically(Motion.bouncy()) + fadeIn(tween(220)),
+        exit = shrinkVertically(tween(220)) + fadeOut(tween(160)),
+    ) {
+        Column(Modifier.padding(top = 8.dp)) {
             RowLabel(Icons.Outlined.PhotoCamera, stringResource(R.string.camera))
             Segmented(
                 options = CameraChoice.entries,
@@ -152,10 +210,7 @@ fun ColumnScope.HeadTrackingSettingsContent(
                 label = { it.labelRes },
                 onSelect = { c -> update { it.copy(camera = c) } },
             )
-            Divider()
-            GestureMappingEditor(settings = settings, update = { t -> update(t) })
-
-            Divider()
+            Spacer(Modifier.height(12.dp))
             EnhancedSlider(
                 label = stringResource(R.string.hold_time),
                 icon = Icons.Outlined.HourglassBottom,
@@ -174,7 +229,6 @@ fun ColumnScope.HeadTrackingSettingsContent(
                 format = { String.format(Locale.US, "%.1f s", it) },
                 onValueChange = { v -> update { it.copy(cooldownSec = v) } },
             )
-            Divider()
             SettingSwitchRow(
                 icon = Icons.Outlined.CameraFront,
                 title = stringResource(R.string.camera_preview),
@@ -189,7 +243,7 @@ fun ColumnScope.HeadTrackingSettingsContent(
                 checked = settings.turnHaptic,
                 onChange = { v -> update { it.copy(turnHaptic = v) } },
             )
-            Divider()
+            Spacer(Modifier.height(8.dp))
             val calibrated = settings.yawOffset != 0f || settings.rollOffset != 0f || settings.pitchOffset != 0f
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -271,12 +325,18 @@ fun GestureSettingsSheet(
             modifier = Modifier
                 .fillMaxHeight(0.9f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = if (isCompactWidth()) 12.dp else 24.dp)
                 .padding(bottom = 40.dp)
                 .navigationBarsPadding(),
         ) {
             SettingsCard {
                 HeadTrackingSettingsContent(settings = settings, update = update)
+            }
+            Spacer(Modifier.height(16.dp))
+            // pedále – tiež otáčajú strany, preto sú aj tu
+            SectionHeader(Icons.Outlined.Piano, stringResource(R.string.pedals))
+            SettingsCard {
+                PedalSettingsContent(settings = settings, update = update)
             }
         }
     }

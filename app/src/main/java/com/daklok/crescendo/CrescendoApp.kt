@@ -10,6 +10,7 @@ import com.daklok.crescendo.data.AnnotationStore
 import com.daklok.crescendo.data.AppDatabase
 import com.daklok.crescendo.data.LibraryRepository
 import com.daklok.crescendo.data.SettingsRepository
+import com.daklok.crescendo.data.SetlistRepository
 import com.daklok.crescendo.data.backup.BackupManager
 
 class CrescendoApp : Application() {
@@ -18,10 +19,13 @@ class CrescendoApp : Application() {
     }
 
     val database by lazy { AppDatabase.create(this) }
-    val library by lazy { LibraryRepository(this, database.pieceDao(), database.folderDao()) }
+    val library by lazy { LibraryRepository(this, database.pieceDao(), database.folderDao(), database.setlistDao()) }
+    val setlists by lazy { SetlistRepository(database.setlistDao()) }
     val settings by lazy { SettingsRepository(this) }
     val annotations by lazy { AnnotationStore(this) }
     val backup by lazy { BackupManager(this) }
+    /** Pedále klavíra cez MIDI (USB / Bluetooth). */
+    val midi by lazy { com.daklok.crescendo.data.MidiPedals(this) }
 
     /**
      * Rozsah pre práce, ktoré musia dobehnúť aj po zatvorení obrazovky / panela,

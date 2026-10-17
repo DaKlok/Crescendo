@@ -36,10 +36,6 @@ enum class GesturePreset(@StringRes val labelRes: Int, val map: Map<GestureTrigg
         R.string.preset_wink,
         mapOf(GestureTrigger.WINK_RIGHT to PageAction.NEXT, GestureTrigger.WINK_LEFT to PageAction.PREVIOUS),
     ),
-    ONE_EYE(
-        R.string.preset_one_eye,
-        mapOf(GestureTrigger.WINK_LEFT to PageAction.NEXT),
-    ),
 }
 
 object GestureMap {

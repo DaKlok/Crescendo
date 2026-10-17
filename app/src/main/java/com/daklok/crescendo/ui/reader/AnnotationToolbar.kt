@@ -1,5 +1,22 @@
 package com.daklok.crescendo.ui.reader
 
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.outlined.FormatSize
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Approval
+import com.daklok.crescendo.ui.common.Swatch
+import com.daklok.crescendo.ui.common.ColorPickerDialog
+import kotlin.math.abs
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Slider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.daklok.crescendo.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
@@ -98,12 +115,19 @@ fun AnnotationToolbar(
         tonalElevation = 3.dp,
         shadowElevation = 8.dp,
     ) {
-        ToolbarContainer(vertical) {
+        ToolbarContainer(
+            vertical = vertical,
+            // zatváracie tlačidlo je vždy viditeľné – zvyšok panela sa pri nedostatku miesta posúva
+            pinned = {
+                SmallIconButton(Icons.Outlined.Close, stringResource(R.string.close_annotations), onClick = onClose)
+            },
+        ) {
             ToolToggle(tool == InkTool.PEN, Icons.Outlined.Edit, stringResource(R.string.tool_pen)) { controller.selectTool(InkTool.PEN) }
             ToolToggle(tool == InkTool.HIGHLIGHTER, Icons.Outlined.Highlight, stringResource(R.string.tool_highlighter)) {
                 controller.selectTool(InkTool.HIGHLIGHTER)
             }
             ToolToggle(tool == InkTool.SHAPE, Icons.Outlined.Category, stringResource(R.string.tool_shapes)) { controller.selectTool(InkTool.SHAPE) }
+            ToolToggle(tool == InkTool.STAMP, Icons.Outlined.Approval, stringResource(R.string.tool_stamp)) { controller.selectTool(InkTool.STAMP) }
             ToolToggle(tool == InkTool.LASSO, Icons.Outlined.HighlightAlt, stringResource(R.string.tool_lasso)) {
                 controller.selectTool(InkTool.LASSO)
             }
@@ -115,6 +139,18 @@ fun AnnotationToolbar(
                 Separator(vertical)
                 ColorButton(controller)
                 WidthButton(controller)
+            }
+
+            ToolSection(tool == InkTool.STAMP, vertical) {
+                Separator(vertical)
+                StampButton(controller)
+                ColorButton(controller)
+                StampSizeButton(controller)
+            }
+
+            // vybraná pečiatka – zmazanie
+            ToolSection(tool == InkTool.STAMP && controller.selectedStamp != null, vertical) {
+                SmallIconButton(Icons.Outlined.Delete, stringResource(R.string.stamp_delete)) { controller.deleteSelectedStamp() }
             }
 
             ToolSection(tool == InkTool.ERASER, vertical) {
@@ -137,41 +173,20 @@ fun AnnotationToolbar(
 
             ToolSection(tool == InkTool.LASSO && controller.selection.isNotEmpty(), vertical) {
                 Separator(vertical)
-                IconButton(onClick = { controller.duplicateSelection() }) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.selection_duplicate))
-                }
-                IconButton(onClick = { controller.deleteSelection() }) {
-                    Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.selection_delete))
-                }
+                SmallIconButton(Icons.Outlined.ContentCopy, stringResource(R.string.selection_duplicate)) { controller.duplicateSelection() }
+                SmallIconButton(Icons.Outlined.Delete, stringResource(R.string.selection_delete)) { controller.deleteSelection() }
             }
 
             Separator(vertical)
-            IconButton(onClick = { controller.undo() }, enabled = controller.canUndo) {
-                Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = stringResource(R.string.undo))
-            }
-            IconButton(onClick = { controller.redo() }, enabled = controller.canRedo) {
-                Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = stringResource(R.string.redo))
-            }
-
-            Separator(vertical)
-            FilledIconToggleButton(
-                checked = fingerDrawing,
-                onCheckedChange = onFingerDrawingChange,
-                colors = IconButtonDefaults.filledIconToggleButtonColors(
-                    containerColor = Color.Transparent,
-                    checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                ),
-            ) {
-                Icon(Icons.Outlined.TouchApp, contentDescription = stringResource(R.string.draw_with_finger))
-            }
-            IconButton(onClick = { confirmClear = true }) {
-                Icon(Icons.Outlined.DeleteSweep, contentDescription = stringResource(R.string.clear_page_annotations))
-            }
-            PositionButton(position, onPositionChange)
-            IconButton(onClick = onClose) {
-                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.close_annotations))
-            }
+            SmallIconButton(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.undo), enabled = controller.canUndo) { controller.undo() }
+            SmallIconButton(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.redo), enabled = controller.canRedo) { controller.redo() }
+            MoreButton(
+                fingerDrawing = fingerDrawing,
+                onFingerDrawingChange = onFingerDrawingChange,
+                position = position,
+                onPositionChange = onPositionChange,
+                onClearPage = { confirmClear = true },
+            )
         }
     }
 
@@ -191,26 +206,110 @@ fun AnnotationToolbar(
     }
 }
 
+/** Posúvateľný obsah panela + pevné tlačidlo na konci. */
 @Composable
-private fun ToolbarContainer(vertical: Boolean, content: @Composable () -> Unit) {
+private fun ToolbarContainer(
+    vertical: Boolean,
+    pinned: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
     if (vertical) {
         Column(
             modifier = Modifier
-                .width(64.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
+                .width(56.dp)
+                .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) { content() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) { content() }
+            Separator(true)
+            pinned()
+        }
     } else {
         Row(
             modifier = Modifier
-                .height(64.dp)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp),
+                .height(56.dp)
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) { content() }
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) { content() }
+            Separator(false)
+            pinned()
+        }
+    }
+}
+
+/** Menšie ikonové tlačidlo (40 dp), aby sa panel zmestil aj na výšku. */
+@Composable
+private fun SmallIconButton(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** Menej používané voľby: kreslenie prstom, vymazanie strany, poloha panela. */
+@Composable
+private fun MoreButton(
+    fingerDrawing: Boolean,
+    onFingerDrawingChange: (Boolean) -> Unit,
+    position: ToolbarPosition,
+    onPositionChange: (ToolbarPosition) -> Unit,
+    onClearPage: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        SmallIconButton(Icons.Outlined.MoreHoriz, stringResource(R.string.more)) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp)) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.draw_with_finger)) },
+                leadingIcon = { Icon(Icons.Outlined.TouchApp, null) },
+                trailingIcon = { Switch(checked = fingerDrawing, onCheckedChange = null) },
+                onClick = { onFingerDrawingChange(!fingerDrawing) },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.clear_page_annotations)) },
+                leadingIcon = { Icon(Icons.Outlined.DeleteSweep, null) },
+                onClick = {
+                    open = false
+                    onClearPage()
+                },
+            )
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            Text(
+                stringResource(R.string.toolbar_position),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            ToolbarPosition.entries.forEach { p ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(p.labelRes)) },
+                    leadingIcon = {
+                        if (p == position) Icon(Icons.Outlined.Check, null) else Spacer(Modifier.size(24.dp))
+                    },
+                    onClick = {
+                        onPositionChange(p)
+                        open = false
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -233,26 +332,28 @@ private fun ToolToggle(
     FilledIconToggleButton(
         checked = selected,
         onCheckedChange = { onClick() },
+        modifier = Modifier.size(40.dp),
         colors = IconButtonDefaults.filledIconToggleButtonColors(
             containerColor = Color.Transparent,
             checkedContainerColor = MaterialTheme.colorScheme.primary,
             checkedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
     ) {
-        Icon(icon, contentDescription = description)
+        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
     }
 }
 
-/** Kruh s aktuálnou farbou; ťuk otvorí paletu. */
+/** Kruh s aktuálnou farbou; ťuk otvorí paletu s rýchlymi farbami, vlastnými farbami a kolieskom. */
 @Composable
 private fun ColorButton(controller: AnnotationController) {
     var open by remember { mutableStateOf(false) }
-    val colors = if (controller.tool == InkTool.HIGHLIGHTER) AnnotationController.HIGHLIGHT_COLORS
-    else AnnotationController.PEN_COLORS
+    var wheelOpen by remember { mutableStateOf(false) }
+    val highlighter = controller.tool == InkTool.HIGHLIGHTER
+    val colors = if (highlighter) AnnotationController.HIGHLIGHT_COLORS else AnnotationController.PEN_COLORS
     Box {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(40.dp)
                 .clickable { open = true },
             contentAlignment = Alignment.Center,
         ) {
@@ -263,154 +364,329 @@ private fun ColorButton(controller: AnnotationController) {
                     .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),
             )
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            // všetko v jednom riadku: rýchle farby | vlastné farby | koliesko
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 colors.forEach { c ->
-                    ColorDot(Color(c), selected = controller.currentColor == c) {
+                    Swatch(Color(c), selected = controller.currentColor == c, size = 26) {
                         controller.setColor(c)
                         open = false
+                    }
+                }
+                val recent = controller.recentColors.toList().take(4)
+                if (recent.isNotEmpty()) {
+                    VerticalDivider(
+                        Modifier
+                            .height(24.dp)
+                            .padding(horizontal = 4.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    recent.forEach { c ->
+                        Swatch(Color(c), selected = controller.currentColor == c, size = 26) {
+                            controller.setColor(c)
+                            open = false
+                        }
+                    }
+                }
+                IconButton(
+                    onClick = {
+                        open = false
+                        wheelOpen = true
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Outlined.Palette, contentDescription = stringResource(R.string.custom_color))
+                }
+            }
+        }
+    }
+    if (wheelOpen) {
+        ColorPickerDialog(
+            title = stringResource(if (highlighter) R.string.highlighter_color else R.string.pen_color),
+            initial = controller.currentColor,
+            presets = emptyList(),
+            onPick = {
+                controller.pickCustomColor(it)
+                wheelOpen = false
+            },
+            onDismiss = { wheelOpen = false },
+        )
+    }
+}
+
+/** Náhľad pečiatky v štvorčeku [box]. */
+@Composable
+private fun StampPreview(text: String, color: Color, box: Int = 40, selected: Boolean = false, onClick: (() -> Unit)? = null) {
+    Box(
+        modifier = Modifier
+            .size(box.dp)
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                RoundedCornerShape(12.dp),
+            )
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
+        Canvas(Modifier.size(box.dp)) {
+            val len = if (text.startsWith("§")) 2 else text.length
+            val s = (size.height * 0.5f).coerceAtMost(size.width / (0.62f * len.coerceAtLeast(1)))
+            drawStampAt(text, color, size.width / 2f, size.height / 2f, s)
+        }
+    }
+}
+
+/** Aktuálna pečiatka; ťuk otvorí výber pečiatok, vlastný text a veľkosť. */
+@Composable
+private fun StampButton(controller: AnnotationController) {
+    var open by remember { mutableStateOf(false) }
+    var customOpen by remember { mutableStateOf(false) }
+    val color = Color(controller.penColor)
+    Box {
+        StampPreview(controller.stampText, color, box = 40) { open = true }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val ink = MaterialTheme.colorScheme.onSurface
+                StampCatalog.GROUPS.forEach { group ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        group.forEach { t ->
+                            StampPreview(t, ink, selected = controller.stampText == t) {
+                                controller.stampText = t
+                                open = false
+                            }
+                        }
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    controller.recentStampTexts.toList().take(4).forEach { t ->
+                        Box(
+                            modifier = Modifier
+                                .height(40.dp)
+                                .background(
+                                    if (controller.stampText == t) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                                    RoundedCornerShape(12.dp),
+                                )
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    controller.stampText = t
+                                    open = false
+                                }
+                                .padding(horizontal = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(t, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    IconButton(onClick = {
+                        open = false
+                        customOpen = true
+                    }) {
+                        Icon(Icons.Outlined.TextFields, contentDescription = stringResource(R.string.stamp_custom))
                     }
                 }
             }
         }
     }
+    if (customOpen) {
+        var text by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { customOpen = false },
+            shape = RoundedCornerShape(28.dp),
+            title = { Text(stringResource(R.string.stamp_custom)) },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(40) },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.stamp_custom_hint)) },
+                    shape = RoundedCornerShape(16.dp),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = text.isNotBlank(),
+                    onClick = {
+                        controller.useCustomStampText(text)
+                        customOpen = false
+                    },
+                ) { Text(stringResource(R.string.choose)) }
+            },
+            dismissButton = { TextButton(onClick = { customOpen = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
-/** Ukážka aktuálnej hrúbky; ťuk otvorí výber hrúbky. */
+/** Veľkosť pečiatky – pre nové pečiatky aj pre práve vybranú. */
+@Composable
+private fun StampSizeButton(controller: AnnotationController) {
+    var open by remember { mutableStateOf(false) }
+    val range = AnnotationController.STAMP_RANGE
+    fun fontFor(v: Float) = (10 + (v - range.start) / (range.endInclusive - range.start) * 16).sp
+    Box {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.FormatSize, contentDescription = stringResource(R.string.stamp_size))
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = {
+                controller.commitStampResize()
+                open = false
+            },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            SizeMenuContent(
+                presets = AnnotationController.STAMP_SIZES,
+                value = controller.stampSize,
+                range = range,
+                dot = { sz, _ -> Text("A", fontSize = fontFor(sz), fontWeight = FontWeight.Bold) },
+                onPreset = {
+                    controller.setStampSizeLive(it)
+                    controller.commitStampResize()
+                },
+                onSlide = { controller.setStampSizeLive(it) },
+                onSlideFinished = { controller.commitStampResize() },
+            )
+        }
+    }
+}
+
+/** Mapuje hodnotu z rozsahu na priemer ukážky v dp. */
+private fun previewDiameter(value: Float, range: ClosedFloatingPointRange<Float>, minDp: Float, maxDp: Float): Float {
+    val t = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+    return minDp + (maxDp - minDp) * t
+}
+
+/** Ukážka aktuálnej hrúbky; ťuk otvorí tri rýchle hrúbky a posuvník na presné nastavenie. */
 @Composable
 private fun WidthButton(controller: AnnotationController) {
     var open by remember { mutableStateOf(false) }
     val highlighter = controller.tool == InkTool.HIGHLIGHTER
     val widths = if (highlighter) AnnotationController.HIGHLIGHT_WIDTHS else AnnotationController.PEN_WIDTHS
-    val dots = if (highlighter) floatArrayOf(10f, 16f, 24f) else floatArrayOf(4f, 8f, 13f)
-    val idx = widths.indexOfFirst { it == controller.currentWidth }.coerceAtLeast(0)
+    val range = controller.widthRange
+    val (minDp, maxDp) = if (highlighter) 7f to 30f else 3f to 22f
     val color = Color(controller.currentColor)
+    val current = controller.currentWidth
     Box {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(40.dp)
                 .clickable { open = true },
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size(dots[idx].dp).background(color, CircleShape))
+            Box(Modifier.size(previewDiameter(current, range, minDp, maxDp).coerceAtMost(30f).dp).background(color, CircleShape))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                widths.forEachIndexed { i, w ->
-                    WidthDot(dots[i], selected = i == idx, color = color) {
-                        controller.setWidth(w)
-                        open = false
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PositionButton(position: ToolbarPosition, onChange: (ToolbarPosition) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Outlined.OpenWith, contentDescription = stringResource(R.string.toolbar_position))
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            ToolbarPosition.entries.forEach { p ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(p.labelRes)) },
-                    leadingIcon = { if (p == position) Icon(Icons.Outlined.Check, null) },
-                    onClick = {
-                        onChange(p)
-                        open = false
-                    },
-                )
-            }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            SizeMenuContent(
+                presets = widths,
+                value = current,
+                range = range,
+                dot = { w, mod ->
+                    Box(mod.size(previewDiameter(w, range, minDp, maxDp).dp).background(color, CircleShape))
+                },
+                onPreset = {
+                    controller.setWidth(it)
+                    open = false
+                },
+                onSlide = { controller.setWidth(it) },
+            )
         }
     }
 }
 
+/** Spoločný obsah ponuky veľkosti: rýchle voľby + posuvník + ukážka. */
 @Composable
-private fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+private fun SizeMenuContent(
+    presets: FloatArray,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    dot: @Composable (Float, Modifier) -> Unit,
+    onPreset: (Float) -> Unit,
+    onSlide: (Float) -> Unit,
+    onSlideFinished: () -> Unit = {},
+) {
+    // jeden riadok: tri rýchle veľkosti a posuvník
+    Row(
+        modifier = Modifier.padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Box(
+        presets.forEach { w ->
+            val selected = abs(w - value) < 0.0002f
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        CircleShape,
+                    )
+                    .clip(CircleShape)
+                    .clickable { onPreset(w) },
+                contentAlignment = Alignment.Center,
+            ) { dot(w, Modifier) }
+        }
+        Slider(
+            value = value.coerceIn(range),
+            onValueChange = onSlide,
+            onValueChangeFinished = onSlideFinished,
+            valueRange = range,
             modifier = Modifier
-                .size(if (selected) 32.dp else 28.dp)
-                .background(color, CircleShape)
-                .border(
-                    width = if (selected) 3.dp else 1.dp,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                    shape = CircleShape,
-                ),
+                .width(170.dp)
+                .padding(start = 6.dp, end = 4.dp),
         )
     }
 }
 
 @Composable
-private fun WidthDot(diameter: Float, selected: Boolean, color: Color, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                CircleShape,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(diameter.dp).background(color, CircleShape))
-    }
-}
-
-/** Veľkosť gumy: ukážka aktuálneho kruhu, ťuk otvorí výber z troch veľkostí. */
-@Composable
 private fun EraserSizeButton(controller: AnnotationController) {
     var open by remember { mutableStateOf(false) }
-    val sizes = AnnotationController.ERASER_SIZES
-    val dots = floatArrayOf(10f, 18f, 28f)
-    val idx = sizes.indexOfFirst { it == controller.eraserSize }.coerceAtLeast(0)
+    val range = AnnotationController.ERASER_RANGE
     Box {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(40.dp)
                 .clickable { open = true },
             contentAlignment = Alignment.Center,
         ) {
-            EraserDot(dots[idx])
+            EraserDot(previewDiameter(controller.eraserSize, range, 8f, 34f).coerceAtMost(32f))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                sizes.forEachIndexed { i, sz ->
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                if (i == idx) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                                CircleShape,
-                            )
-                            .clickable {
-                                controller.eraserSize = sz
-                                open = false
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        EraserDot(dots[i])
-                    }
-                }
-            }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            SizeMenuContent(
+                presets = AnnotationController.ERASER_SIZES,
+                value = controller.eraserSize,
+                range = range,
+                dot = { sz, _ -> EraserDot(previewDiameter(sz, range, 8f, 34f).coerceAtMost(32f)) },
+                onPreset = {
+                    controller.eraserSize = it
+                    open = false
+                },
+                onSlide = { controller.eraserSize = it },
+            )
         }
     }
 }

@@ -7,8 +7,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** PEN a HIGHLIGHTER sa ukladajú; ERASER, LASSO a SHAPE sú len nástroje. */
-enum class InkTool { PEN, HIGHLIGHTER, ERASER, LASSO, SHAPE }
+/** PEN a HIGHLIGHTER sa ukladajú ako ťahy; ostatné sú nástroje (STAMP = pečiatka). */
+enum class InkTool { PEN, HIGHLIGHTER, ERASER, LASSO, SHAPE, STAMP }
 
 enum class ShapeKind { LINE, RECT, ELLIPSE }
 
@@ -26,6 +26,25 @@ class InkStroke(
     val count: Int get() = pts.size / 3
 }
 
+/**
+ * Hudobná pečiatka (dynamika, prstoklad, fermata, vlastný text…).
+ * [text] je buď obyčajný text, alebo symbol začínajúci „§“ (kreslí sa ako tvar, pozri StampRenderer).
+ * [x], [y] = stred (normalizované), [size] = výška písma ako zlomok šírky strany.
+ */
+class Stamp(
+    val text: String,
+    val x: Float,
+    val y: Float,
+    val size: Float,
+    val color: Int,
+)
+
+/** Všetky poznámky jednej skladby. */
+class PieceNotes(
+    val pages: Map<Int, List<InkStroke>> = emptyMap(),
+    val stamps: Map<Int, List<Stamp>> = emptyMap(),
+)
+
 /** Ukladá poznámky každej skladby do JSON súboru v internom úložisku. */
 class AnnotationStore(private val context: Context) {
 
@@ -37,14 +56,15 @@ class AnnotationStore(private val context: Context) {
 
     private fun file(pieceId: Long) = File(dir, "$pieceId.json")
 
-    suspend fun load(pieceId: Long): Map<Int, List<InkStroke>> = withContext(Dispatchers.IO) {
+    suspend fun load(pieceId: Long): PieceNotes = withContext(Dispatchers.IO) {
         val f = file(pieceId)
-        if (!f.exists()) return@withContext emptyMap()
+        if (!f.exists()) return@withContext PieceNotes()
         try {
-            val pages = JSONObject(f.readText()).getJSONObject("pages")
-            val out = HashMap<Int, List<InkStroke>>()
-            for (key in pages.keys()) {
-                val arr = pages.getJSONArray(key)
+            val root = JSONObject(f.readText())
+            val pagesJson = root.optJSONObject("pages") ?: JSONObject()
+            val pages = HashMap<Int, List<InkStroke>>()
+            for (key in pagesJson.keys()) {
+                val arr = pagesJson.getJSONArray(key)
                 val list = ArrayList<InkStroke>(arr.length())
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
@@ -59,18 +79,36 @@ class AnnotationStore(private val context: Context) {
                         )
                     )
                 }
-                out[key.toInt()] = list
+                pages[key.toInt()] = list
             }
-            out
+
+            val stamps = HashMap<Int, List<Stamp>>()
+            root.optJSONObject("stamps")?.let { sj ->
+                for (key in sj.keys()) {
+                    val arr = sj.getJSONArray(key)
+                    stamps[key.toInt()] = (0 until arr.length()).map { i ->
+                        val o = arr.getJSONObject(i)
+                        Stamp(
+                            text = o.getString("t"),
+                            x = o.getDouble("x").toFloat(),
+                            y = o.getDouble("y").toFloat(),
+                            size = o.getDouble("s").toFloat(),
+                            color = o.getInt("c"),
+                        )
+                    }
+                }
+            }
+
+            PieceNotes(pages, stamps)
         } catch (e: Exception) {
-            emptyMap()
+            PieceNotes()
         }
     }
 
-    suspend fun save(pieceId: Long, pages: Map<Int, List<InkStroke>>) = withContext(Dispatchers.IO) {
+    suspend fun save(pieceId: Long, notes: PieceNotes) = withContext(Dispatchers.IO) {
         val root = JSONObject()
         val pagesJson = JSONObject()
-        for ((page, strokes) in pages) {
+        for ((page, strokes) in notes.pages) {
             if (strokes.isEmpty()) continue
             val arr = JSONArray()
             for (s in strokes) {
@@ -87,10 +125,31 @@ class AnnotationStore(private val context: Context) {
             pagesJson.put(page.toString(), arr)
         }
         root.put("pages", pagesJson)
+
+        val stampsJson = JSONObject()
+        for ((page, list) in notes.stamps) {
+            if (list.isEmpty()) continue
+            val arr = JSONArray()
+            list.forEach { st ->
+                arr.put(
+                    JSONObject()
+                        .put("t", st.text)
+                        .put("x", st.x.toDouble())
+                        .put("y", st.y.toDouble())
+                        .put("s", st.size.toDouble())
+                        .put("c", st.color)
+                )
+            }
+            stampsJson.put(page.toString(), arr)
+        }
+        root.put("stamps", stampsJson)
+
+
+        val text = root.toString()
         val tmp = File(dir, "$pieceId.json.tmp")
-        tmp.writeText(root.toString())
+        tmp.writeText(text)
         if (!tmp.renameTo(file(pieceId))) {
-            file(pieceId).writeText(root.toString())
+            file(pieceId).writeText(text)
             tmp.delete()
         }
     }

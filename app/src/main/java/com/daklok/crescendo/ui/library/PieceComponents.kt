@@ -1,5 +1,18 @@
 package com.daklok.crescendo.ui.library
 
+import com.daklok.crescendo.ui.common.isCompactWidth
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.combinedClickable
 import com.daklok.crescendo.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -156,7 +169,12 @@ fun PieceCard(
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onMove: () -> Unit,
+    onExport: () -> Unit,
+    onAddToSetlist: () -> Unit,
     modifier: Modifier = Modifier,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onSelect: () -> Unit = {},
 ) {
     val haptic = rememberHaptic()
     var menuOpen by remember { mutableStateOf(false) }
@@ -165,14 +183,27 @@ fun PieceCard(
     val interaction = remember { MutableInteractionSource() }
 
     Card(
-        onClick = {
-            haptic(HapticFeedbackType.TextHandleMove)
-            onOpen()
-        },
-        interactionSource = interaction,
-        modifier = modifier.pressScale(interaction),
+        modifier = modifier
+            .pressScale(interaction)
+            .selectedLook(selected)
+            .clip(RoundedCornerShape(24.dp))
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                onClick = {
+                    haptic(HapticFeedbackType.TextHandleMove)
+                    if (selectionMode) onSelect() else onOpen()
+                },
+                onLongClick = {
+                    haptic(HapticFeedbackType.LongPress)
+                    onSelect()
+                },
+            ),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
     ) {
         Box(Modifier.padding(8.dp)) {
             ThumbImage(
@@ -182,18 +213,36 @@ fun PieceCard(
                     .aspectRatio(0.74f)
                     .clip(RoundedCornerShape(18.dp)),
             )
-            FavoriteButton(
-                checked = piece.favorite,
-                onToggle = onToggleFavorite,
+            // plný názov: v Box vnútri Card (ColumnScope) by sa inak vybralo ColumnScope.AnimatedVisibility
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !selectionMode,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                FavoriteButton(
+                    checked = piece.favorite,
+                    onToggle = onToggleFavorite,
+                    modifier = Modifier.padding(6.dp),
+                )
+            }
+            SelectionCheck(
+                visible = selectionMode,
+                checked = selected,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp),
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
             )
-            Box(
-                Modifier
+            // plný názov: v Box vnútri Card (ColumnScope) by sa inak vybralo ColumnScope.AnimatedVisibility
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !selectionMode,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(6.dp),
             ) {
+              Box {
                 FilledIconButton(
                     onClick = {
                         haptic(HapticFeedbackType.TextHandleMove)
@@ -223,11 +272,22 @@ fun PieceCard(
                         onClick = { menuOpen = false; onMove() },
                     )
                     DropdownMenuItem(
+                        text = { Text(stringResource(R.string.add_to_setlist)) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) },
+                        onClick = { menuOpen = false; onAddToSetlist() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.export_pdf)) },
+                        leadingIcon = { Icon(Icons.Outlined.IosShare, null) },
+                        onClick = { menuOpen = false; onExport() },
+                    )
+                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.remove)) },
                         leadingIcon = { Icon(Icons.Outlined.Delete, null) },
                         onClick = { menuOpen = false; deleteOpen = true },
                     )
                 }
+              }
             }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp, top = 2.dp)) {
@@ -309,6 +369,51 @@ fun PieceCard(
     }
 }
 
+/** Pri výbere: vybraná karta sa jemne zmenší a dostane rámik. */
+@Composable
+fun Modifier.selectedLook(selected: Boolean): Modifier {
+    val scale by animateFloatAsState(if (selected) 0.95f else 1f, Motion.bouncy(), label = "sel")
+    val border by animateDpAsState(if (selected) 3.dp else 0.dp, Motion.bouncy(), label = "selBorder")
+    val color = MaterialTheme.colorScheme.primary
+    return this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .then(if (border > 0.dp) Modifier.border(border, color, RoundedCornerShape(24.dp)) else Modifier)
+}
+
+/** Krúžok s fajkou v rohu karty v režime výberu. */
+@Composable
+fun SelectionCheck(visible: Boolean, checked: Boolean, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + scaleIn(Motion.bouncy()),
+        exit = fadeOut() + scaleOut(),
+        modifier = modifier,
+    ) {
+        val bg by animateColorAsState(
+            if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f),
+            label = "checkBg",
+        )
+        Box(
+            Modifier
+                .size(30.dp)
+                .background(bg, CircleShape)
+                .border(2.dp, if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = checked,
+                enter = scaleIn(Motion.bouncy()) + fadeIn(),
+                exit = scaleOut() + fadeOut(),
+            ) {
+                Icon(Icons.Outlined.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
+    }
+}
+
 /** Veľká karta „Pokračovať v čítaní“. */
 @Composable
 fun ContinueCard(
@@ -320,6 +425,7 @@ fun ContinueCard(
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
     val progress = progressOf(piece)
+    val compact = isCompactWidth()
     Card(
         onClick = {
             haptic(HapticFeedbackType.TextHandleMove)
@@ -333,14 +439,14 @@ fun ContinueCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(if (compact) 12.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 14.dp else 20.dp),
         ) {
             ThumbImage(
                 file = thumb,
                 modifier = Modifier
-                    .width(92.dp)
+                    .width(if (compact) 64.dp else 92.dp)
                     .aspectRatio(0.74f)
                     .clip(RoundedCornerShape(16.dp)),
             )
@@ -354,7 +460,7 @@ fun ContinueCard(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     piece.title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -371,17 +477,30 @@ fun ContinueCard(
                     drawStopIndicator = {},
                 )
             }
-            Button(
-                onClick = {
-                    haptic(HapticFeedbackType.TextHandleMove)
-                    onOpen()
-                },
-                shape = RoundedCornerShape(20.dp),
-                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-            ) {
-                Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.page_n, piece.lastPage + 1))
+            if (compact) {
+                // mobil: len ikona, aby zostalo miesto na názov
+                FilledIconButton(
+                    onClick = {
+                        haptic(HapticFeedbackType.TextHandleMove)
+                        onOpen()
+                    },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = stringResource(R.string.page_n, piece.lastPage + 1))
+                }
+            } else {
+                Button(
+                    onClick = {
+                        haptic(HapticFeedbackType.TextHandleMove)
+                        onOpen()
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.page_n, piece.lastPage + 1))
+                }
             }
         }
     }

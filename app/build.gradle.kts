@@ -74,6 +74,8 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.mlkit.face.detection)
+    // skenovanie nôt fotoaparátom (orezanie, vyrovnanie, PDF)
+    implementation(libs.mlkit.document.scanner)
 
     // Záloha na Google Drive
     implementation(libs.play.services.auth)

@@ -14,6 +14,8 @@ data class FolderEntity(
     val name: String,
     val parentId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Farba priečinka (ARGB) alebo null = predvolená farba témy. */
+    val color: Int? = null,
 )
 
 @Dao
@@ -29,6 +31,9 @@ interface FolderDao {
 
     @Query("UPDATE folders SET name = :name WHERE id = :id")
     suspend fun rename(id: Long, name: String)
+
+    @Query("UPDATE folders SET color = :color WHERE id = :id")
+    suspend fun setColor(id: Long, color: Int?)
 
     @Query("UPDATE folders SET parentId = :parentId WHERE id = :id")
     suspend fun setParent(id: Long, parentId: Long?)

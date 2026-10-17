@@ -53,8 +53,8 @@ class BackupManager(private val app: CrescendoApp) {
     /** Priečinky v `filesDir`, ktoré patria do zálohy. */
     private val folders = listOf("pdfs", "thumbs", "annotations", "datastore")
 
-    /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk). */
-    private val prefsNames = listOf("annotation_tools", "crescendo_language")
+    /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk, tempá metronómu). */
+    private val prefsNames = listOf("annotation_tools", "crescendo_language", "metronome")
     private val dbName = "crescendo.db"
 
     val authorizationRequest: AuthorizationRequest =

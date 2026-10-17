@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">O aplikácii</string>
+    <string name="add_to_setlist">Pridať do setlistu</string>
     <string name="all_count">Všetko · %1$d</string>
     <string name="annotations">Poznámky</string>
     <string name="appearance">Vzhľad</string>
@@ -45,17 +46,26 @@
     <string name="camera_preview">Náhľad kamery</string>
     <string name="camera_preview_desc">Malé okno s ukazovateľom natočenia</string>
     <string name="cancel">Zrušiť</string>
+    <string name="cancel_selection">Zrušiť výber</string>
     <string name="choose">Vybrať</string>
     <string name="clear_annotations_text">Všetky poznámky na zobrazenej strane sa zmažú. Dá sa to vrátiť tlačidlom Späť.</string>
     <string name="clear_annotations_title">Zmazať poznámky?</string>
     <string name="clear_page_annotations">Zmazať poznámky na strane</string>
     <string name="close">Zavrieť</string>
     <string name="close_annotations">Zavrieť poznámky</string>
+    <string name="color_brightness">Jas</string>
+    <string name="color_default">Predvolená</string>
+    <string name="color_hex">Hex kód</string>
     <string name="continue_reading">POKRAČOVAŤ V ČÍTANÍ</string>
     <string name="cooldown">Pauza po otočení</string>
     <string name="create">Vytvoriť</string>
     <string name="current_location">Aktuálne umiestnenie</string>
+    <string name="custom_color">Vlastná farba…</string>
+    <string name="custom_colors">Tvoje farby</string>
+    <string name="custom_hint">Pri každom geste zvoľ, čo urobí: nič, predchádzajúcu alebo ďalšiu stranu.</string>
     <string name="delete">Zmazať</string>
+    <string name="delete_n_folders_text">Vybrané priečinky sa zrušia; ich obsah sa presunie o úroveň vyššie, nič sa nestratí.</string>
+    <string name="delete_n_pieces_text">Vybrané skladby sa odstránia z knižnice aj s poznámkami.</string>
     <string name="delete_piece_text">„%1$s“ sa odstráni z knižnice aj s poznámkami.</string>
     <string name="delete_piece_title">Odstrániť skladbu?</string>
     <string name="disconnect">Odpojiť</string>
@@ -70,15 +80,25 @@
     <string name="error_pdf_open">PDF sa nepodarilo otvoriť</string>
     <string name="error_piece_not_found">Skladba sa nenašla</string>
     <string name="error_title">Chyba</string>
+    <string name="export_desc">„%1$s“ sa uloží ako nové PDF so všetkými tvojimi poznámkami. Originál ostane nezmenený.</string>
+    <string name="export_failed">PDF sa nepodarilo vytvoriť</string>
     <string name="export_file">Uložiť zálohu do súboru</string>
     <string name="export_file_desc">Noty, poznámky, priečinky aj nastavenia v jednom ZIP súbore</string>
+    <string name="export_pdf">Exportovať PDF</string>
+    <string name="export_save">Uložiť do súboru</string>
+    <string name="export_saved">PDF uložené</string>
+    <string name="export_share">Zdieľať</string>
+    <string name="export_title">Export s poznámkami</string>
+    <string name="export_working">Vytváram PDF…</string>
     <string name="favorite_add">Pridať do obľúbených</string>
     <string name="favorite_remove">Odobrať z obľúbených</string>
     <string name="favorites">Obľúbené</string>
+    <string name="folder_color">Farba</string>
+    <string name="folder_color_title">Farba priečinka „%1$s“</string>
     <string name="folder_empty">Prázdny</string>
     <string name="folder_is_empty">Priečinok je prázdny. Importuj PDF alebo sem presuň skladby cez ponuku ⋮ na karte.</string>
     <string name="folders">Priečinky</string>
-    <string name="fullscreen">Celá obrazovka</string>
+    <string name="fullscreen">Režim hrania</string>
     <string name="g_nod">Kývnutie hlavou</string>
     <string name="g_nod_desc">Dole = ďalej, hore = späť</string>
     <string name="g_smile">Úsmev</string>
@@ -90,15 +110,19 @@
     <string name="g_wink">Žmurknutie</string>
     <string name="g_wink_desc">Pravé oko = ďalej, ľavé = späť. Obyčajné žmurkanie sa ignoruje.</string>
     <string name="general">Všeobecné</string>
+    <string name="gesture_none">nič</string>
     <string name="gesture_settings">Nastavenia gest</string>
+    <string name="gesture_summary">Ďalej: %1$s · Späť: %2$s</string>
     <string name="gestures">Gestá</string>
     <string name="gestures_desc">Ťukni na gestá, ktoré majú otočiť na ďalšiu alebo predchádzajúcu stranu. Kombinuj ľubovoľne.</string>
     <string name="haptics">Haptická odozva</string>
     <string name="haptics_desc">Jemné vibrácie pri ťuknutiach</string>
     <string name="head_tracking">Otáčanie hlavou</string>
-    <string name="head_tracking_desc">Natoč hlavu doprava = ďalšia strana. Kamera beží len v zariadení.</string>
+    <string name="head_tracking_desc">Otáčaj strany pohybom hlavy alebo tváre. Kamera beží len v zariadení.</string>
     <string name="head_tracking_switch">Sledovanie hlavy</string>
+    <string name="highlighter_color">Farba zvýrazňovača</string>
     <string name="hold_time">Čas podržania</string>
+    <string name="how_to_turn">Ako otáčať strany</string>
     <string name="import_file">Obnoviť zo súboru</string>
     <string name="import_file_desc">Nahradí všetko v aplikácii obsahom vybranej zálohy</string>
     <string name="import_here">Importovať sem</string>
@@ -114,13 +138,37 @@
     <string name="library">Knižnica</string>
     <string name="library_empty_text">Importuj PDF s notami a budú tu po ruke. Súbory zostanú len v tvojom zariadení.</string>
     <string name="library_empty_title">Knižnica je zatiaľ prázdna</string>
+    <string name="metronome">Metronóm</string>
+    <string name="metronome_sound">Zvuk zap./vyp.</string>
+    <string name="metronome_start">Spustiť</string>
+    <string name="metronome_stop">Zastaviť</string>
+    <string name="metronome_tap">Ťukni tempo</string>
+    <string name="midi_bt_change">Bluetooth: %1$s (zmeniť)</string>
+    <string name="midi_bt_connect">Pripojiť cez Bluetooth MIDI</string>
+    <string name="midi_bt_failed">Nepodarilo sa pripojiť</string>
+    <string name="midi_bt_off">Bluetooth je vypnutý</string>
+    <string name="midi_bt_permission">Na nájdenie klavíra treba povolenie Bluetooth</string>
+    <string name="midi_bt_scan_hint">Zapni na klavíri Bluetooth MIDI. Klavíry sa zobrazia tu – nepáruj ich v systémových nastaveniach.</string>
+    <string name="midi_bt_searching">Hľadám…</string>
+    <string name="midi_cable_hint">Kábel: prepoj USB port klavíra (to host) s tabletom cez USB‑C/OTG kábel – zistí sa automaticky.</string>
+    <string name="midi_connected">Pripojené: %1$s</string>
+    <string name="midi_double">Dvojité stlačenie</string>
+    <string name="midi_double_desc">Strana sa otočí až po dvoch rýchlych stlačeniach – pedál pri hraní funguje normálne (odporúčané pre sustain)</string>
+    <string name="midi_not_connected">Žiadny nástroj nie je pripojený</string>
     <string name="more">Viac</string>
+    <string name="more_settings">Ďalšie nastavenia</string>
+    <string name="more_settings_desc">Kamera, časovanie, náhľad, vibrácia, stred</string>
     <string name="move">Presunúť</string>
+    <string name="move_down">Posunúť nižšie</string>
     <string name="move_to">Presunúť do…</string>
     <string name="move_to_folder">Presunúť do priečinka</string>
+    <string name="move_up">Posunúť vyššie</string>
+    <string name="msg_added_to_setlist">Pridané do „%2$s“ (%1$d)</string>
+    <string name="msg_deleted_n">Odstránené položky: %1$d</string>
     <string name="msg_folder_removed">Priečinok „%1$s“ zrušený, obsah sa presunul o úroveň vyššie</string>
     <string name="msg_import_failed">Import zlyhal – súbor nie je platné PDF alebo je chránený heslom</string>
     <string name="msg_import_partial">Pridaných: %1$d, zlyhalo: %2$d</string>
+    <string name="msg_moved_n">Presunuté do: %2$s (%1$d)</string>
     <string name="msg_moved_to">Presunuté do: %1$s</string>
     <string name="msg_piece_added">Skladba pridaná</string>
     <string name="msg_piece_deleted">Skladba odstránená</string>
@@ -142,12 +190,30 @@
     <string name="page_n">Strana %1$d</string>
     <string name="page_x_of_y">Strana %1$d z %2$d</string>
     <string name="paper_desc">„Papier“ používa teplé, matné farby s vysokým kontrastom – ideálne pre displej NXTPAPER.</string>
+    <string name="pedal_bt_desc">Spáruj pedál v nastaveniach Bluetooth tabletu. Šípky, Page Up/Down a medzerník fungujú hneď; ak tvoj pedál posiela iné klávesy, nauč ich tu.</string>
+    <string name="pedal_bt_title">Bluetooth pedál (otáčač strán)</string>
+    <string name="pedal_captured">Zachytené: %1$s</string>
+    <string name="pedal_default_keys">Predvolené (šípky, Page Up/Down, medzerník)</string>
+    <string name="pedal_learn">Naučiť</string>
+    <string name="pedal_midi_desc">Otáčaj strany pedálmi digitálneho klavíra – cez USB kábel alebo Bluetooth MIDI</string>
+    <string name="pedal_midi_title">Pedále klavíra (MIDI)</string>
+    <string name="pedal_midi_unsupported">Toto zariadenie nepodporuje MIDI</string>
+    <string name="pedal_none">Nepoužívať</string>
+    <string name="pedal_press_now">Teraz stlač pedál…</string>
+    <string name="pedal_press_piano">Stlač pedál na klavíri…</string>
+    <string name="pedal_soft">Soft pedál (ľavý)</string>
+    <string name="pedal_sostenuto">Sostenuto pedál (stredný)</string>
+    <string name="pedal_sustain">Sustain pedál (pravý)</string>
+    <string name="pedals">Pedále</string>
+    <string name="pen_color">Farba pera</string>
     <string name="piece_default_title">Skladba</string>
     <string name="pieces">Skladby</string>
     <string name="pos_bottom">Dole</string>
     <string name="pos_left">Vľavo</string>
     <string name="pos_right">Vpravo</string>
     <string name="pos_top">Hore</string>
+    <string name="preset_custom">Vlastné</string>
+    <string name="preset_custom_desc">Vyber si ľubovoľné gestá pre ďalšiu a predchádzajúcu stranu</string>
     <string name="preset_one_eye">Len ľavé oko = ďalej</string>
     <string name="preset_tilt">Nakláňanie hlavy</string>
     <string name="preset_turn">Otáčanie hlavy</string>
@@ -173,8 +239,13 @@
     <string name="reverse_direction_desc">Vľavo = ďalej, vpravo = späť</string>
     <string name="reverse_scope_desc">Pre otočenie, naklonenie a kývnutie</string>
     <string name="save">Uložiť</string>
+    <string name="scan_default_name">Sken %1$s</string>
+    <string name="scan_failed">Skener nie je na tomto zariadení dostupný</string>
+    <string name="scan_music">Naskenovať noty</string>
+    <string name="scan_name_title">Názov naskenovanej skladby</string>
     <string name="search">Hľadať</string>
     <string name="search_hint">Hľadať v celej knižnici…</string>
+    <string name="select_all">Vybrať všetko</string>
     <string name="selection_delete">Zmazať výber</string>
     <string name="selection_duplicate">Duplikovať výber</string>
     <string name="sensitivity">Citlivosť (uhol)</string>
@@ -182,6 +253,18 @@
     <string name="sensitivity_nod">Uhol kývnutia</string>
     <string name="sensitivity_tilt">Uhol naklonenia</string>
     <string name="sensitivity_turn">Uhol otočenia</string>
+    <string name="setlist_add_n">Pridať (%1$d)</string>
+    <string name="setlist_add_pieces">Pridať skladby</string>
+    <string name="setlist_delete_text">Setlist „%1$s“ sa zmaže. Skladby ostanú v knižnici.</string>
+    <string name="setlist_delete_title">Zmazať setlist?</string>
+    <string name="setlist_empty">Setlist je prázdny. Pridaj skladby z knižnice.</string>
+    <string name="setlist_new">Nový setlist</string>
+    <string name="setlist_next">Ďalej: %1$s</string>
+    <string name="setlist_play">Hrať</string>
+    <string name="setlist_remove_item">Odobrať zo setlistu</string>
+    <string name="setlists">Setlisty</string>
+    <string name="setlists_empty_text">Zoraď si skladby na koncert, omšu alebo skúšku. Pri hraní sa po poslednej strane automaticky otvorí ďalšia skladba.</string>
+    <string name="setlists_empty_title">Zatiaľ žiadne setlisty</string>
     <string name="settings">Nastavenia</string>
     <string name="shape_ellipse">Elipsa</string>
     <string name="shape_line">Čiara</string>
@@ -191,6 +274,12 @@
     <string name="sort_added">Naposledy pridané</string>
     <string name="sort_recent">Naposledy otvorené</string>
     <string name="sort_title">Názov A–Z</string>
+    <string name="stage_mode_exit">Ukončiť</string>
+    <string name="stage_mode_hint">Režim hrania</string>
+    <string name="stamp_custom">Vlastný text</string>
+    <string name="stamp_custom_hint">napr. dýchaj, pomalšie, 3×</string>
+    <string name="stamp_delete">Zmazať pečiatku</string>
+    <string name="stamp_size">Veľkosť pečiatky</string>
     <string name="support">Podpora</string>
     <string name="support_desc">Ak sa ti aplikácia páči a chceš podporiť jej vývoj, môžeš mi kúpiť kávu ☕</string>
     <string name="swap_eyes">Vymeniť oči</string>
@@ -207,6 +296,7 @@
     <string name="tool_lasso">Výber (lasso)</string>
     <string name="tool_pen">Pero</string>
     <string name="tool_shapes">Tvary</string>
+    <string name="tool_stamp">Pečiatky</string>
     <string name="toolbar_position">Poloha panela</string>
     <string name="toolbar_position_long">Poloha panela nástrojov</string>
     <string name="tracking_no_face">Nevidím tvár</string>
@@ -233,6 +323,12 @@
     <string name="volume_keys_desc">Hlasitosť dole = ďalej, hore = späť. Bluetooth pedály na otáčanie strán fungujú vždy.</string>
     <string name="wink_hold">Dĺžka žmurknutia</string>
     <string name="zoom_reset">%1$d %%  ·  Obnoviť</string>
+    <plurals name="delete_n_title">
+        <item quantity="one">Odstrániť %d položku?</item>
+        <item quantity="few">Odstrániť %d položky?</item>
+        <item quantity="many">Odstrániť %d položiek?</item>
+        <item quantity="other">Odstrániť %d položiek?</item>
+    </plurals>
     <plurals name="items">
         <item quantity="one">%d položka</item>
         <item quantity="few">%d položky</item>
@@ -244,5 +340,11 @@
         <item quantity="few">%d strany</item>
         <item quantity="many">%d strany</item>
         <item quantity="other">%d strán</item>
+    </plurals>
+    <plurals name="selected_n">
+        <item quantity="one">%d vybraná</item>
+        <item quantity="few">%d vybrané</item>
+        <item quantity="many">%d vybraných</item>
+        <item quantity="other">%d vybraných</item>
     </plurals>
 </resources>

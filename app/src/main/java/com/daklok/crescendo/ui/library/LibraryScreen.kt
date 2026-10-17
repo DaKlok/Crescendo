@@ -1,5 +1,27 @@
 package com.daklok.crescendo.ui.library
 
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.MoreVert
+import com.daklok.crescendo.ui.common.isCompactWidth
+import com.daklok.crescendo.ui.setlist.AddToSetlistDialog
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.automirrored.outlined.QueueMusic
+import com.daklok.crescendo.ui.common.ExportRequest
+import com.daklok.crescendo.ui.common.ExportPdfDialog
+import com.daklok.crescendo.ui.common.FOLDER_COLORS
+import com.daklok.crescendo.ui.common.ColorPickerDialog
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
 import com.daklok.crescendo.R
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
@@ -109,17 +131,29 @@ fun LibraryScreen(
     vm: LibraryViewModel,
     onOpenPiece: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSetlists: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val haptic = rememberHaptic()
     val notifier = rememberNotifier()
     var searchOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
+    var compactMenuOpen by remember { mutableStateOf(false) }
+    val compact = isCompactWidth()
 
     var newFolderOpen by remember { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var deletingFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var moving by remember { mutableStateOf<MoveTarget?>(null) }
+    var coloringFolder by remember { mutableStateOf<FolderEntity?>(null) }
+    var exporting by remember { mutableStateOf<ExportRequest?>(null) }
+    var bulkDeleteOpen by remember { mutableStateOf(false) }
+    var bulkMoveOpen by remember { mutableStateOf(false) }
+    /** Skladby, ktoré sa práve pridávajú do setlistu (dialóg). */
+    var addingToSetlist by remember { mutableStateOf<List<Long>?>(null) }
+    val setlists by vm.setlists.collectAsStateWithLifecycle()
+    val selection by vm.selection.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         vm.messages.collect { m ->
@@ -127,8 +161,9 @@ fun LibraryScreen(
         }
     }
 
-    // Späť = o priečinok vyššie
-    BackHandler(enabled = state.currentFolder != null) {
+    // Späť = najprv zruší výber, potom o priečinok vyššie
+    BackHandler(enabled = selection.active) { vm.clearSelection() }
+    BackHandler(enabled = state.currentFolder != null && !selection.active) {
         haptic(HapticFeedbackType.TextHandleMove)
         vm.goUp()
     }
@@ -141,111 +176,237 @@ fun LibraryScreen(
         picker.launch(arrayOf("application/pdf"))
     }
 
+    // skenovanie fotoaparátom -> PDF -> dialóg s názvom -> import
+    var scannedPdf by remember { mutableStateOf<android.net.Uri?>(null) }
+    val startScan = rememberDocumentScanner(
+        onScanned = { uri, _ -> scannedPdf = uri },
+        onError = { android.widget.Toast.makeText(context, R.string.scan_failed, android.widget.Toast.LENGTH_LONG).show() },
+    )
+    val launchScan = {
+        haptic(HapticFeedbackType.LongPress)
+        startScan()
+    }
+
     val current = state.currentFolder
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AnimatedContent(
-                                targetState = current == null,
-                                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-                                label = "markOrBack",
-                            ) { atRoot ->
-                                if (atRoot) {
-                                    AppMark(32.dp)
-                                } else {
-                                    TonalIconButton(
-                                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                                        contentDescription = stringResource(R.string.back),
-                                        onClick = { vm.goUp() },
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            AnimatedContent(
-                                targetState = current?.name ?: "Crescendo",
-                                transitionSpec = {
-                                    (fadeIn(tween(220)) + slideInHorizontally { it / 6 }) togetherWith fadeOut(tween(150))
-                                },
-                                label = "title",
-                            ) { title ->
-                                Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
+                AnimatedContent(
+                    targetState = selection.active,
+                    transitionSpec = {
+                        (fadeIn(tween(220)) + slideInVertically { -it / 3 }) togetherWith fadeOut(tween(150))
                     },
-                    actions = {
-                        TonalIconButton(
-                            icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
-                            contentDescription = stringResource(R.string.search),
-                            highlighted = searchOpen,
-                            onClick = {
-                                searchOpen = !searchOpen
-                                if (!searchOpen) vm.setQuery("")
+                    label = "topBar",
+                ) { selecting ->
+                    if (selecting) {
+                        SelectionTopBar(
+                            count = selection.count,
+                            onClose = { vm.clearSelection() },
+                            onSelectAll = {
+                                haptic(HapticFeedbackType.TextHandleMove)
+                                vm.selectAll()
                             },
+                            onMove = { bulkMoveOpen = true },
+                            onDelete = { bulkDeleteOpen = true },
+                            onAddToSetlist = if (selection.pieces.isNotEmpty()) {
+                                { addingToSetlist = state.pieces.filter { it.id in selection.pieces }.map { it.id } }
+                            } else null,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        TonalIconButton(
-                            icon = Icons.Outlined.CreateNewFolder,
-                            contentDescription = stringResource(R.string.new_folder),
-                            onClick = { newFolderOpen = true },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Box {
-                            TonalIconButton(
-                                icon = Icons.AutoMirrored.Outlined.Sort,
-                                contentDescription = stringResource(R.string.sort),
-                                onClick = { sortMenuOpen = true },
-                            )
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                                shape = RoundedCornerShape(16.dp),
-                            ) {
-                                LibrarySort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(option.labelRes)) },
-                                        leadingIcon = {
-                                            if (option == state.sort) Icon(Icons.Outlined.Check, null)
-                                            else Spacer(Modifier.size(24.dp))
+                    } else {
+                        TopAppBar(
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AnimatedContent(
+                                        targetState = current == null,
+                                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                                        label = "markOrBack",
+                                    ) { atRoot ->
+                                        if (atRoot) {
+                                            AppMark(32.dp)
+                                        } else {
+                                            TonalIconButton(
+                                                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                                                contentDescription = stringResource(R.string.back),
+                                                onClick = { vm.goUp() },
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    AnimatedContent(
+                                        targetState = current?.name ?: "Crescendo",
+                                        transitionSpec = {
+                                            (fadeIn(tween(220)) + slideInHorizontally { it / 6 }) togetherWith fadeOut(tween(150))
                                         },
-                                        onClick = {
-                                            haptic(HapticFeedbackType.TextHandleMove)
-                                            vm.setSort(option)
-                                            sortMenuOpen = false
-                                        },
-                                    )
+                                        label = "title",
+                                    ) { title ->
+                                        Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
-                            }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        TonalIconButton(
-                            icon = Icons.Outlined.Settings,
-                            contentDescription = stringResource(R.string.settings),
-                            onClick = onOpenSettings,
-                            modifier = Modifier.padding(end = 8.dp),
+                            },
+                            actions = {
+                              if (compact) {
+                                // mobil: hľadanie, ponuka ⋯ (setlisty, priečinok, zoradenie) a nastavenia
+                                TonalIconButton(
+                                    icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
+                                    contentDescription = stringResource(R.string.search),
+                                    highlighted = searchOpen,
+                                    onClick = {
+                                        searchOpen = !searchOpen
+                                        if (!searchOpen) vm.setQuery("")
+                                    },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Box {
+                                    TonalIconButton(
+                                        icon = Icons.Outlined.MoreVert,
+                                        contentDescription = stringResource(R.string.more),
+                                        onClick = { compactMenuOpen = true },
+                                    )
+                                    DropdownMenu(
+                                        expanded = compactMenuOpen,
+                                        onDismissRequest = { compactMenuOpen = false },
+                                        shape = RoundedCornerShape(16.dp),
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.setlists)) },
+                                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) },
+                                            onClick = { compactMenuOpen = false; onOpenSetlists() },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.new_folder)) },
+                                            leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
+                                            onClick = { compactMenuOpen = false; newFolderOpen = true },
+                                        )
+                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                        Text(
+                                            stringResource(R.string.sort),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                        )
+                                        LibrarySort.entries.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(option.labelRes)) },
+                                                leadingIcon = {
+                                                    if (option == state.sort) Icon(Icons.Outlined.Check, null)
+                                                    else Spacer(Modifier.size(24.dp))
+                                                },
+                                                onClick = {
+                                                    haptic(HapticFeedbackType.TextHandleMove)
+                                                    vm.setSort(option)
+                                                    compactMenuOpen = false
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.Settings,
+                                    contentDescription = stringResource(R.string.settings),
+                                    onClick = onOpenSettings,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                              } else {
+                                TonalIconButton(
+                                    icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
+                                    contentDescription = stringResource(R.string.search),
+                                    highlighted = searchOpen,
+                                    onClick = {
+                                        searchOpen = !searchOpen
+                                        if (!searchOpen) vm.setQuery("")
+                                    },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.AutoMirrored.Outlined.QueueMusic,
+                                    contentDescription = stringResource(R.string.setlists),
+                                    onClick = onOpenSetlists,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.CreateNewFolder,
+                                    contentDescription = stringResource(R.string.new_folder),
+                                    onClick = { newFolderOpen = true },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Box {
+                                    TonalIconButton(
+                                        icon = Icons.AutoMirrored.Outlined.Sort,
+                                        contentDescription = stringResource(R.string.sort),
+                                        onClick = { sortMenuOpen = true },
+                                    )
+                                    DropdownMenu(
+                                        expanded = sortMenuOpen,
+                                        onDismissRequest = { sortMenuOpen = false },
+                                        shape = RoundedCornerShape(16.dp),
+                                    ) {
+                                        LibrarySort.entries.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(option.labelRes)) },
+                                                leadingIcon = {
+                                                    if (option == state.sort) Icon(Icons.Outlined.Check, null)
+                                                    else Spacer(Modifier.size(24.dp))
+                                                },
+                                                onClick = {
+                                                    haptic(HapticFeedbackType.TextHandleMove)
+                                                    vm.setSort(option)
+                                                    sortMenuOpen = false
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.Settings,
+                                    contentDescription = stringResource(R.string.settings),
+                                    onClick = onOpenSettings,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                              }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.background,
+                                scrolledContainerColor = MaterialTheme.colorScheme.background,
+                                titleContentColor = MaterialTheme.colorScheme.onBackground,
+                            ),
                         )
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                )
+                    }
+                }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = { launchImport() },
-                    shape = RoundedCornerShape(20.dp),
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-                    text = { Text(if (current != null) stringResource(R.string.import_here) else stringResource(R.string.import_pdf)) },
-                    expanded = !state.globalView,
-                )
+                AnimatedVisibility(
+                    visible = !selection.active,
+                    enter = scaleIn(Motion.bouncy()) + fadeIn(),
+                    exit = scaleOut(tween(160)) + fadeOut(tween(160)),
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        // naskenovať noty fotoaparátom
+                        SmallFloatingActionButton(
+                            onClick = { launchScan() },
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        ) {
+                            Icon(Icons.Outlined.DocumentScanner, contentDescription = stringResource(R.string.scan_music))
+                        }
+                        ExtendedFloatingActionButton(
+                            onClick = { launchImport() },
+                            shape = RoundedCornerShape(20.dp),
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                            text = { Text(if (current != null) stringResource(R.string.import_here) else stringResource(R.string.import_pdf)) },
+                            expanded = !state.globalView,
+                        )
+                    }
+                }
             },
         ) { padding ->
             Column(
@@ -310,8 +471,19 @@ fun LibraryScreen(
                         LibraryGrid(
                             s = s,
                             vm = vm,
+                            selection = selection,
+                            onColorFolder = { coloringFolder = it },
+                            onAddToSetlist = { piece -> addingToSetlist = listOf(piece.id) },
+                            onExport = { piece ->
+                                exporting = ExportRequest(
+                                    title = piece.title,
+                                    pdf = vm.pdfFile(piece),
+                                    notes = { vm.loadAnnotations(piece.id) },
+                                )
+                            },
                             onOpenPiece = onOpenPiece,
                             onImport = { launchImport() },
+                            onScan = { launchScan() },
                             onRenameFolder = { renamingFolder = it },
                             onDeleteFolder = { deletingFolder = it },
                             onMove = { moving = it },
@@ -376,6 +548,110 @@ fun LibraryScreen(
         )
     }
 
+    scannedPdf?.let { uri ->
+        val defaultName = remember(uri) {
+            context.getString(
+                R.string.scan_default_name,
+                java.text.SimpleDateFormat("d. M. yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
+            )
+        }
+        NameDialog(
+            title = stringResource(R.string.scan_name_title),
+            initial = defaultName,
+            confirmLabel = stringResource(R.string.save),
+            onConfirm = { name ->
+                haptic(HapticFeedbackType.LongPress)
+                vm.importScan(uri, name)
+                scannedPdf = null
+            },
+            onDismiss = { scannedPdf = null },
+        )
+    }
+
+    coloringFolder?.let { folder ->
+        ColorPickerDialog(
+            title = stringResource(R.string.folder_color_title, folder.name),
+            initial = folder.color ?: FOLDER_COLORS[7],
+            presets = FOLDER_COLORS,
+            onPick = {
+                haptic(HapticFeedbackType.LongPress)
+                vm.setFolderColor(folder, it)
+                coloringFolder = null
+            },
+            onReset = {
+                vm.setFolderColor(folder, null)
+                coloringFolder = null
+            },
+            onDismiss = { coloringFolder = null },
+        )
+    }
+
+    exporting?.let { req ->
+        ExportPdfDialog(request = req, onDismiss = { exporting = null })
+    }
+
+    if (bulkDeleteOpen) {
+        val pieceCount = selection.pieces.size
+        val folderCount = selection.folders.size
+        AlertDialog(
+            onDismissRequest = { bulkDeleteOpen = false },
+            shape = RoundedCornerShape(28.dp),
+            icon = { Icon(Icons.Outlined.Delete, null) },
+            title = { Text(pluralStringResource(R.plurals.delete_n_title, selection.count, selection.count)) },
+            text = {
+                Text(
+                    buildString {
+                        if (pieceCount > 0) append(context.getString(R.string.delete_n_pieces_text))
+                        if (folderCount > 0) {
+                            if (isNotEmpty()) append("\n\n")
+                            append(context.getString(R.string.delete_n_folders_text))
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptic(HapticFeedbackType.LongPress)
+                    vm.deleteSelected()
+                    bulkDeleteOpen = false
+                }) { Text(stringResource(R.string.remove)) }
+            },
+            dismissButton = { TextButton(onClick = { bulkDeleteOpen = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
+    addingToSetlist?.let { ids ->
+        AddToSetlistDialog(
+            setlists = setlists,
+            onPick = { id ->
+                haptic(HapticFeedbackType.LongPress)
+                vm.addToSetlist(ids, id)
+                addingToSetlist = null
+                vm.clearSelection()
+            },
+            onCreate = { name ->
+                vm.addToSetlist(ids, null, name)
+                addingToSetlist = null
+                vm.clearSelection()
+            },
+            onDismiss = { addingToSetlist = null },
+        )
+    }
+
+    if (bulkMoveOpen) {
+        MoveToFolderDialog(
+            folders = state.allFolders,
+            currentLocation = state.currentFolder?.id,
+            excluded = vm.selectionExcluded(),
+            onSelect = {
+                haptic(HapticFeedbackType.LongPress)
+                vm.moveSelected(it)
+                bulkMoveOpen = false
+            },
+            onDismiss = { bulkMoveOpen = false },
+        )
+    }
+
     when (val m = moving) {
         is MoveTarget.Piece -> MoveToFolderDialog(
             folders = state.allFolders,
@@ -413,8 +689,13 @@ private fun folderTransition(forward: Boolean): ContentTransform {
 private fun LibraryGrid(
     s: LibraryUiState,
     vm: LibraryViewModel,
+    selection: Selection,
+    onColorFolder: (FolderEntity) -> Unit,
+    onAddToSetlist: (PieceEntity) -> Unit,
+    onExport: (PieceEntity) -> Unit,
     onOpenPiece: (Long) -> Unit,
     onImport: () -> Unit,
+    onScan: () -> Unit,
     onRenameFolder: (FolderEntity) -> Unit,
     onDeleteFolder: (FolderEntity) -> Unit,
     onMove: (MoveTarget) -> Unit,
@@ -422,14 +703,18 @@ private fun LibraryGrid(
     val haptic = rememberHaptic()
     val gridState = rememberLazyGridState()
     val current = s.currentFolder
+    // mobil: menšie karty (2 stĺpce), užšie okraje
+    val compact = isCompactWidth()
+    val side = if (compact) 12.dp else 20.dp
+    val gap = if (compact) 12.dp else 16.dp
 
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(minSize = 200.dp),
+        columns = GridCells.Adaptive(minSize = if (compact) 150.dp else 200.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 120.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(start = side, end = side, top = if (compact) 20.dp else 28.dp, bottom = 120.dp),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        verticalArrangement = Arrangement.spacedBy(gap),
     ) {
         if (s.importing) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "importing") {
@@ -499,15 +784,24 @@ private fun LibraryGrid(
             item(span = { GridItemSpan(maxLineSpan) }, key = "h-folders") {
                 SectionHeader(Icons.Outlined.Folder, stringResource(R.string.folders), Modifier.animateItem())
             }
-            items(s.folders, key = { "f${it.id}" }) { folder ->
+            // na mobile sú priečinky cez celú šírku (v úzkej karte by sa názov nezmestil)
+            items(
+                s.folders,
+                key = { "f${it.id}" },
+                span = { if (compact) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
+            ) { folder ->
                 FolderCard(
                     folder = folder,
                     itemCount = s.folderCounts[folder.id] ?: 0,
                     onOpen = { vm.openFolder(folder.id) },
                     onRename = { onRenameFolder(folder) },
+                    onColor = { onColorFolder(folder) },
                     onMove = { onMove(MoveTarget.Folder(folder)) },
                     onDelete = { onDeleteFolder(folder) },
                     modifier = Modifier.animateItem(),
+                    selectionMode = selection.active,
+                    selected = folder.id in selection.folders,
+                    onSelect = { vm.toggleFolder(folder.id) },
                 )
             }
         }
@@ -515,7 +809,7 @@ private fun LibraryGrid(
         // ── Skladby ──
         if (s.loaded && s.totalCount == 0 && s.folders.isEmpty() && current == null) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
-                EmptyLibrary(onImport = onImport, modifier = Modifier.animateItem())
+                EmptyLibrary(onImport = onImport, onScan = onScan, modifier = Modifier.animateItem())
             }
         } else if (s.pieces.isEmpty() && (s.globalView || s.folders.isEmpty())) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "nothing") {
@@ -544,11 +838,87 @@ private fun LibraryGrid(
                     onRename = { vm.rename(piece, it) },
                     onDelete = { vm.delete(piece) },
                     onMove = { onMove(MoveTarget.Piece(piece)) },
+                    onExport = { onExport(piece) },
+                    onAddToSetlist = { onAddToSetlist(piece) },
                     modifier = Modifier.animateItem(),
+                    selectionMode = selection.active,
+                    selected = piece.id in selection.pieces,
+                    onSelect = { vm.togglePiece(piece.id) },
                 )
             }
         }
     }
+}
+
+/** Horná lišta v režime výberu: počet, vybrať všetko, presunúť, zmazať. */
+@Composable
+private fun SelectionTopBar(
+    count: Int,
+    onClose: () -> Unit,
+    onSelectAll: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
+    onAddToSetlist: (() -> Unit)?,
+) {
+    TopAppBar(
+        navigationIcon = {
+            TonalIconButton(
+                icon = Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.cancel_selection),
+                onClick = onClose,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        },
+        title = {
+            AnimatedContent(
+                targetState = count,
+                transitionSpec = {
+                    val up = targetState > initialState
+                    (slideInVertically { if (up) it else -it } + fadeIn()) togetherWith
+                        (slideOutVertically { if (up) -it else it } + fadeOut())
+                },
+                label = "count",
+            ) { n ->
+                Text(
+                    pluralStringResource(R.plurals.selected_n, n, n),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+        },
+        actions = {
+            TonalIconButton(
+                icon = Icons.Outlined.SelectAll,
+                contentDescription = stringResource(R.string.select_all),
+                onClick = onSelectAll,
+            )
+            Spacer(Modifier.width(8.dp))
+            if (onAddToSetlist != null) {
+                TonalIconButton(
+                    icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
+                    contentDescription = stringResource(R.string.add_to_setlist),
+                    onClick = onAddToSetlist,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            TonalIconButton(
+                icon = Icons.AutoMirrored.Outlined.DriveFileMove,
+                contentDescription = stringResource(R.string.move_to_folder),
+                onClick = onMove,
+            )
+            Spacer(Modifier.width(8.dp))
+            TonalIconButton(
+                icon = Icons.Outlined.Delete,
+                contentDescription = stringResource(R.string.remove),
+                onClick = onDelete,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.onBackground,
+        ),
+    )
 }
 
 @Composable
@@ -601,7 +971,7 @@ private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EmptyLibrary(onImport: () -> Unit, modifier: Modifier = Modifier) {
+private fun EmptyLibrary(onImport: () -> Unit, onScan: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -628,6 +998,12 @@ private fun EmptyLibrary(onImport: () -> Unit, modifier: Modifier = Modifier) {
             Icon(Icons.Outlined.Add, null)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.import_pdf))
+        }
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(onClick = onScan, shape = RoundedCornerShape(20.dp)) {
+            Icon(Icons.Outlined.DocumentScanner, null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.scan_music))
         }
     }
 }
