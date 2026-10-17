@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.reader
 
+import com.daklok.crescendo.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -73,7 +75,7 @@ fun PageView(
             if (bmp != null) {
                 Image(
                     bitmap = bmp,
-                    contentDescription = "Strana ${pageIndex + 1}",
+                    contentDescription = stringResource(R.string.page_n, pageIndex + 1),
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.fillMaxSize(),
                 )

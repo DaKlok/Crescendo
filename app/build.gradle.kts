@@ -74,4 +74,8 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.mlkit.face.detection)
+
+    // Záloha na Google Drive
+    implementation(libs.play.services.auth)
+    implementation(libs.androidx.work.runtime.ktx)
 }

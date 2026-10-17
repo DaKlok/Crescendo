@@ -1,6 +1,15 @@
 package com.daklok.crescendo.ui.library
 
+import com.daklok.crescendo.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.daklok.crescendo.ui.common.IconBadge
+import com.daklok.crescendo.ui.common.pressScale
+import com.daklok.crescendo.ui.common.rememberHaptic
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +22,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,68 +65,64 @@ fun FolderCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = rememberHaptic()
     var menuOpen by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
     Card(
-        onClick = onOpen,
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        onClick = {
+            haptic(HapticFeedbackType.TextHandleMove)
+            onOpen()
+        },
+        interactionSource = interaction,
+        modifier = modifier.pressScale(interaction),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            modifier = Modifier.padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.6f),
-            ) {
-                Icon(
-                    Icons.Rounded.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .size(28.dp),
-                )
-            }
+            IconBadge(Icons.Outlined.Folder, active = itemCount > 0)
             Column(Modifier.weight(1f)) {
                 Text(
                     folder.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    when (itemCount) {
-                        0 -> "Prázdny"
-                        1 -> "1 položka"
-                        in 2..4 -> "$itemCount položky"
-                        else -> "$itemCount položiek"
-                    },
+                    if (itemCount == 0) stringResource(R.string.folder_empty)
+                    else pluralStringResource(R.plurals.items, itemCount, itemCount),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "Viac")
+                IconButton(onClick = {
+                    haptic(HapticFeedbackType.TextHandleMove)
+                    menuOpen = true
+                }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.more))
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    shape = RoundedCornerShape(16.dp),
+                ) {
                     DropdownMenuItem(
-                        text = { Text("Premenovať") },
-                        leadingIcon = { Icon(Icons.Rounded.Edit, null) },
+                        text = { Text(stringResource(R.string.rename)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
                         onClick = { menuOpen = false; onRename() },
                     )
                     DropdownMenuItem(
-                        text = { Text("Presunúť") },
-                        leadingIcon = { Icon(Icons.Rounded.FolderOpen, null) },
+                        text = { Text(stringResource(R.string.move)) },
+                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) },
                         onClick = { menuOpen = false; onMove() },
                     )
                     DropdownMenuItem(
-                        text = { Text("Zrušiť priečinok") },
-                        leadingIcon = { Icon(Icons.Rounded.Delete, null) },
+                        text = { Text(stringResource(R.string.remove_folder)) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
                         onClick = { menuOpen = false; onDelete() },
                     )
                 }
@@ -140,13 +145,15 @@ fun NameDialog(
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(title) },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text("Názov") },
+                placeholder = { Text(stringResource(R.string.name)) },
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focus),
@@ -158,7 +165,7 @@ fun NameDialog(
                 enabled = text.isNotBlank(),
             ) { Text(confirmLabel) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušiť") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -177,12 +184,13 @@ fun MoveToFolderDialog(
     val tree = remember(folders, excluded) { flattenTree(folders, excluded) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Presunúť do…") },
+        shape = RoundedCornerShape(28.dp),
+        title = { Text(stringResource(R.string.move_to)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 item {
                     DestinationRow(
-                        name = "Knižnica",
+                        name = stringResource(R.string.library),
                         depth = 0,
                         isRoot = true,
                         selected = currentLocation == null,
@@ -201,7 +209,7 @@ fun MoveToFolderDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušiť") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -221,7 +229,7 @@ private fun DestinationRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (isRoot) Icons.Rounded.LibraryMusic else Icons.Rounded.Folder,
+            if (isRoot) Icons.Outlined.LibraryMusic else Icons.Outlined.Folder,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
         )
@@ -234,7 +242,7 @@ private fun DestinationRow(
             overflow = TextOverflow.Ellipsis,
             color = if (selected) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
-        if (selected) Icon(Icons.Rounded.Check, contentDescription = "Aktuálne umiestnenie")
+        if (selected) Icon(Icons.Outlined.Check, contentDescription = stringResource(R.string.current_location))
     }
 }
 

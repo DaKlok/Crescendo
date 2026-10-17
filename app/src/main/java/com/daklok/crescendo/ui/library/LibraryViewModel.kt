@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.library
 
+import com.daklok.crescendo.R
+import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,6 +44,9 @@ data class LibraryUiState(
     val loaded: Boolean = false,
 )
 
+/** Hlásenie pre plávajúcu notifikáciu. */
+data class UiMessage(val text: String, val error: Boolean = false)
+
 private data class Filters(
     val query: String,
     val favoritesOnly: Boolean,
@@ -50,6 +55,7 @@ private data class Filters(
 )
 
 class LibraryViewModel(
+    private val app: Application,
     private val library: LibraryRepository,
     private val settingsRepo: SettingsRepository,
 ) : ViewModel() {
@@ -59,8 +65,12 @@ class LibraryViewModel(
     private val importing = MutableStateFlow(0)
     private val currentFolderId = MutableStateFlow<Long?>(null)
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
+    val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
+
+    private fun say(text: String, error: Boolean = false) {
+        _messages.tryEmit(UiMessage(text, error))
+    }
 
     val settings: StateFlow<AppSettings> = settingsRepo.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
@@ -170,9 +180,9 @@ class LibraryViewModel(
             importing.update { it - 1 }
             when {
                 ok > 0 && failed == 0 ->
-                    _messages.tryEmit(if (ok == 1) "Skladba pridaná" else "Pridaných skladieb: $ok")
-                ok > 0 -> _messages.tryEmit("Pridaných: $ok, zlyhalo: $failed")
-                else -> _messages.tryEmit("Import zlyhal – súbor nie je platné PDF alebo je chránený heslom")
+                    say(if (ok == 1) app.getString(R.string.msg_piece_added) else app.getString(R.string.msg_pieces_added, ok))
+                ok > 0 -> say(app.getString(R.string.msg_import_partial, ok, failed))
+                else -> say(app.getString(R.string.msg_import_failed), error = true)
             }
             firstId?.let { onFirstImported?.invoke(it) }
         }
@@ -193,14 +203,14 @@ class LibraryViewModel(
     fun delete(piece: PieceEntity) {
         viewModelScope.launch {
             library.delete(piece)
-            _messages.tryEmit("Skladba odstránená")
+            say(app.getString(R.string.msg_piece_deleted))
         }
     }
 
     fun movePiece(piece: PieceEntity, folderId: Long?) {
         viewModelScope.launch {
             library.movePiece(piece.id, folderId)
-            _messages.tryEmit("Presunuté do: ${folderName(folderId)}")
+            say(app.getString(R.string.msg_moved_to, folderName(folderId)))
         }
     }
 
@@ -223,14 +233,14 @@ class LibraryViewModel(
         if (parentId != null && parentId in descendantsOf(folder.id)) return
         viewModelScope.launch {
             library.moveFolder(folder.id, parentId)
-            _messages.tryEmit("Presunuté do: ${folderName(parentId)}")
+            say(app.getString(R.string.msg_moved_to, folderName(parentId)))
         }
     }
 
     fun deleteFolder(folder: FolderEntity) {
         viewModelScope.launch {
             library.deleteFolder(folder)
-            _messages.tryEmit("Priečinok „${folder.name}“ zrušený, obsah sa presunul o úroveň vyššie")
+            say(app.getString(R.string.msg_folder_removed, folder.name))
         }
     }
 
@@ -253,7 +263,7 @@ class LibraryViewModel(
     }
 
     private fun folderName(id: Long?): String =
-        id?.let { fid -> state.value.allFolders.firstOrNull { it.id == fid }?.name } ?: "Knižnica"
+        id?.let { fid -> state.value.allFolders.firstOrNull { it.id == fid }?.name } ?: app.getString(R.string.library)
 
     fun thumbFile(piece: PieceEntity) = library.thumbFile(piece)
 }

@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.reader
 
+import com.daklok.crescendo.R
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daklok.crescendo.data.AnnotationStore
@@ -21,7 +23,7 @@ data class ReaderUiState(
     val loading: Boolean = true,
     val piece: PieceEntity? = null,
     val document: PdfDocument? = null,
-    val error: String? = null,
+    @StringRes val errorRes: Int? = null,
 )
 
 class ReaderViewModel(
@@ -44,7 +46,7 @@ class ReaderViewModel(
         viewModelScope.launch {
             val piece = library.getPiece(pieceId)
             if (piece == null) {
-                _state.value = ReaderUiState(loading = false, error = "Skladba sa nenašla")
+                _state.value = ReaderUiState(loading = false, errorRes = R.string.error_piece_not_found)
                 return@launch
             }
             try {
@@ -55,7 +57,7 @@ class ReaderViewModel(
                 _state.value = ReaderUiState(
                     loading = false,
                     piece = piece,
-                    error = "PDF sa nepodarilo otvoriť",
+                    errorRes = R.string.error_pdf_open,
                 )
             }
         }

@@ -31,6 +31,10 @@ class AnnotationStore(private val context: Context) {
 
     private val dir = File(context.filesDir, "annotations").apply { mkdirs() }
 
+    /** Posledné nastavenia nástrojov editora (pero, farby, hrúbky…), spoločné pre všetky skladby. */
+    val toolPrefs: android.content.SharedPreferences
+        get() = context.getSharedPreferences("annotation_tools", Context.MODE_PRIVATE)
+
     private fun file(pieceId: Long) = File(dir, "$pieceId.json")
 
     suspend fun load(pieceId: Long): Map<Int, List<InkStroke>> = withContext(Dispatchers.IO) {

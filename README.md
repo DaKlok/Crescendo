@@ -6,6 +6,7 @@
 - Čítačka: dvojstranové zobrazenie na šírku, ťuk vľavo/vpravo, posuvník strán, celá obrazovka, pamätá poslednú stranu, priblíženie štipnutím
 - Poznámky: pero (citlivé na tlak), zvýrazňovač, tvary, lasso (presun/duplikovanie/mazanie), guma, späť/vpred; stylus alebo prst; panel nástrojov vľavo/vpravo/hore/dole
 - Otáčanie strán hlavou (CameraX + ML Kit, všetko lokálne)
+- Záloha všetkého (noty, poznámky, priečinky, nastavenia) na Google Drive – ručne aj automaticky raz denne cez Wi-Fi
 - Téma „Papier“ pre matný NXTPAPER displej, svetlá, tmavá, dynamické farby
 
 Otvor priečinok v Android Studiu (Narwhal alebo novšie), počkaj na Gradle sync a spusti na zariadení (minSdk 26).

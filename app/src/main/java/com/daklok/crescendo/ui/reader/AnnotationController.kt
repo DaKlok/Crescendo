@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.reader
 
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -26,6 +28,8 @@ private sealed interface EditAction {
     class Removed(val page: Int, val strokes: List<InkStroke>) : EditAction
     class Replaced(val page: Int, val old: List<InkStroke>, val new: List<InkStroke>) : EditAction
     class Composite(val actions: List<EditAction>) : EditAction
+    /** Stav celej strany pred a po úprave (guma). */
+    class Snapshot(val page: Int, val before: List<InkStroke>, val after: List<InkStroke>) : EditAction
 }
 
 /** Stav a logika poznámok pre jednu skladbu: ťahy po stranách, nástroje, undo/redo, ukladanie. */
@@ -55,6 +59,13 @@ class AnnotationController(
     var penWidth by mutableFloatStateOf(PEN_WIDTHS[1])
     var highlightWidth by mutableFloatStateOf(HIGHLIGHT_WIDTHS[1])
 
+    /** Priemer gumy ako zlomok šírky strany. */
+    var eraserSize by mutableFloatStateOf(ERASER_SIZES[1])
+
+    /** Kde je práve guma (normalizované súradnice) – na vykreslenie kruhu pod perom. */
+    var eraserCursor by mutableStateOf<androidx.compose.ui.geometry.Offset?>(null)
+    var eraserCursorPage by mutableIntStateOf(-1)
+
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
@@ -64,9 +75,37 @@ class AnnotationController(
     @Volatile
     var stylusSeenAt: Long = 0L
 
+    // ---- zapamätanie nástrojov: po zatvorení editora aj po reštarte aplikácie ostane všetko, ako si to nechal ----
+    init {
+        val p = store.toolPrefs
+        tool = InkTool.entries.firstOrNull { it.name == p.getString("tool", null) }
+            ?.takeIf { it != InkTool.LASSO } ?: InkTool.PEN
+        shapeKind = ShapeKind.entries.firstOrNull { it.name == p.getString("shape", null) } ?: ShapeKind.LINE
+        penColor = p.getInt("pen_color", penColor)
+        highlightColor = p.getInt("highlight_color", highlightColor)
+        penWidth = p.getFloat("pen_width", penWidth)
+        highlightWidth = p.getFloat("highlight_width", highlightWidth)
+        eraserSize = p.getFloat("eraser_size", eraserSize)
+
+        scope.launch {
+            snapshotFlow {
+                listOf(tool.name, shapeKind.name, penColor, highlightColor, penWidth, highlightWidth, eraserSize)
+            }.drop(1).collect {
+                p.edit()
+                    .putString("tool", tool.name)
+                    .putString("shape", shapeKind.name)
+                    .putInt("pen_color", penColor)
+                    .putInt("highlight_color", highlightColor)
+                    .putFloat("pen_width", penWidth)
+                    .putFloat("highlight_width", highlightWidth)
+                    .putFloat("eraser_size", eraserSize)
+                    .apply()
+            }
+        }
+    }
+
     private val undoStack = ArrayDeque<EditAction>()
     private val redoStack = ArrayDeque<EditAction>()
-    private var eraseBatch: MutableList<EditAction>? = null
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var saveJob: Job? = null
@@ -101,27 +140,48 @@ class AnnotationController(
         pushUndo(EditAction.Added(page, stroke))
     }
 
+    private var eraseBefore: MutableMap<Int, List<InkStroke>>? = null
+
     fun beginErase() {
-        eraseBatch = mutableListOf()
+        eraseBefore = mutableMapOf()
     }
 
-    /** Zmaže ťahy blízko bodu (x, y); [ratio] = šírka/výška strany, [radius] v jednotkách šírky strany. */
-    fun eraseAt(page: Int, x: Float, y: Float, ratio: Float, radius: Float = ERASER_RADIUS) {
+    /**
+     * Guma ako štetec: zmaže len tie časti ťahov, cez ktoré guma prešla (od bodu x0,y0 po x1,y1),
+     * zvyšok ťahu ostane – ťah sa podľa potreby rozdelí na viac kúskov.
+     * [ratio] = šírka/výška strany.
+     */
+    fun eraseAt(page: Int, x0: Float, y0: Float, x1: Float, y1: Float, ratio: Float) {
         val strokes = strokesOf(page)
         if (strokes.isEmpty()) return
-        val hit = strokes.filter { hits(it, x, y, ratio, radius) }
-        if (hit.isEmpty()) return
-        pages[page] = strokes - hit.toSet()
-        eraseBatch?.add(EditAction.Removed(page, hit))
+        val r = eraserSize / 2f
+        var changed = false
+        val out = ArrayList<InkStroke>(strokes.size + 4)
+        for (st in strokes) {
+            val pieces = erasePieces(st, x0, y0, x1, y1, ratio, r)
+            if (pieces == null) {
+                out.add(st)
+            } else {
+                changed = true
+                out.addAll(pieces)
+            }
+        }
+        if (changed) {
+            eraseBefore?.getOrPut(page) { strokes }
+            pages[page] = out
+        }
     }
 
     fun endErase() {
-        val batch = eraseBatch ?: return
-        eraseBatch = null
-        when (batch.size) {
+        val before = eraseBefore ?: return
+        eraseBefore = null
+        eraserCursor = null
+        eraserCursorPage = -1
+        val actions = before.map { (page, list) -> EditAction.Snapshot(page, list, strokesOf(page)) }
+        when (actions.size) {
             0 -> Unit
-            1 -> pushUndo(batch[0])
-            else -> pushUndo(EditAction.Composite(batch))
+            1 -> pushUndo(actions[0])
+            else -> pushUndo(EditAction.Composite(actions))
         }
     }
 
@@ -165,6 +225,9 @@ class AnnotationController(
                 val to = if (inverse) action.old else action.new
                 val map = from.zip(to).toMap()
                 pages[action.page] = strokesOf(action.page).map { map[it] ?: it }
+            }
+            is EditAction.Snapshot -> {
+                pages[action.page] = if (inverse) action.before else action.after
             }
             is EditAction.Composite -> {
                 val list = if (inverse) action.actions.asReversed() else action.actions
@@ -303,7 +366,78 @@ class AnnotationController(
     companion object {
         val PEN_WIDTHS = floatArrayOf(0.0022f, 0.0040f, 0.0075f)
         val HIGHLIGHT_WIDTHS = floatArrayOf(0.014f, 0.024f, 0.040f)
-        const val ERASER_RADIUS = 0.018f
+        /** Priemery gumy (zlomok šírky strany): malá, stredná, veľká. */
+        val ERASER_SIZES = floatArrayOf(0.012f, 0.028f, 0.06f)
+
+        /**
+         * Vráti null, ak sa guma ťahu nedotkla; inak zoznam kúskov, ktoré po zmazaní ostanú
+         * (môže byť aj prázdny). Vzdialenosti počítame v jednotkách šírky strany.
+         */
+        private fun erasePieces(
+            s: InkStroke,
+            x0: Float, y0: Float, x1: Float, y1: Float,
+            ratio: Float,
+            r: Float,
+        ): List<InkStroke>? {
+            val n = s.count
+            if (n == 0) return null
+            val reach = r + s.width * 0.3f
+
+            // rýchle vylúčenie podľa obdĺžnika okolo ťahu
+            var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
+            var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+            for (i in 0 until n) {
+                val px = s.pts[i * 3]; val py = s.pts[i * 3 + 1] / ratio
+                if (px < minX) minX = px; if (px > maxX) maxX = px
+                if (py < minY) minY = py; if (py > maxY) maxY = py
+            }
+            val ey0 = y0 / ratio
+            val ey1 = y1 / ratio
+            if (maxX < min(x0, x1) - reach || minX > max(x0, x1) + reach ||
+                maxY < min(ey0, ey1) - reach || minY > max(ey0, ey1) + reach
+            ) return null
+
+            // zahustenie bodov, aby sa dlhé úseky (napr. čiara z tvarov) dali gumovať po kúskoch
+            val step = (r * 0.5f).coerceAtLeast(0.001f)
+            val dense = ArrayList<Float>(n * 3)
+            for (i in 0 until n) {
+                val px = s.pts[i * 3]; val py = s.pts[i * 3 + 1]; val pp = s.pts[i * 3 + 2]
+                if (i > 0) {
+                    val qx = s.pts[(i - 1) * 3]; val qy = s.pts[(i - 1) * 3 + 1]; val qp = s.pts[(i - 1) * 3 + 2]
+                    val d = hypot(px - qx, (py - qy) / ratio)
+                    val extra = (d / step).toInt()
+                    for (k in 1..extra) {
+                        val t = k.toFloat() / (extra + 1)
+                        dense.add(qx + (px - qx) * t); dense.add(qy + (py - qy) * t); dense.add(qp + (pp - qp) * t)
+                    }
+                }
+                dense.add(px); dense.add(py); dense.add(pp)
+            }
+
+            val m = dense.size / 3
+            val hit = BooleanArray(m) { i ->
+                distToSegment(dense[i * 3], dense[i * 3 + 1] / ratio, x0, ey0, x1, ey1) <= reach
+            }
+            if (hit.none { it }) return null
+
+            // zvyšné súvislé úseky -> nové ťahy
+            val pieces = ArrayList<InkStroke>()
+            var start = -1
+            for (i in 0..m) {
+                val inside = i < m && !hit[i]
+                if (inside && start < 0) start = i
+                if (!inside && start >= 0) {
+                    val len = i - start
+                    if (len >= 2) {
+                        val pts = FloatArray(len * 3)
+                        for (k in 0 until len * 3) pts[k] = dense[start * 3 + k]
+                        pieces.add(InkStroke(s.tool, s.color, s.width, pts))
+                    }
+                    start = -1
+                }
+            }
+            return pieces
+        }
 
         val PEN_COLORS = intArrayOf(
             0xFF1B1B1F.toInt(), // čierna

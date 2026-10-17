@@ -1,5 +1,6 @@
 package com.daklok.crescendo.data
 
+import com.daklok.crescendo.R
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -61,7 +62,7 @@ class LibraryRepository(
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(target).use { out -> input.copyTo(out) }
-            } ?: return@withContext Result.failure(IllegalStateException("Súbor sa nepodarilo otvoriť"))
+            } ?: return@withContext Result.failure(IllegalStateException("Cannot open file"))
 
             var pages = 0
             var thumbName: String? = null
@@ -79,12 +80,12 @@ class LibraryRepository(
             }
             if (pages == 0) {
                 target.delete()
-                return@withContext Result.failure(IllegalStateException("PDF nemá žiadne strany"))
+                return@withContext Result.failure(IllegalStateException("PDF has no pages"))
             }
 
             val piece = PieceEntity(
                 title = displayName(uri)?.removeSuffix(".pdf")?.removeSuffix(".PDF")
-                    ?: "Skladba",
+                    ?: context.getString(R.string.piece_default_title),
                 fileName = target.name,
                 thumbName = thumbName,
                 pageCount = pages,

@@ -1,6 +1,17 @@
 package com.daklok.crescendo.ui.reader
 
+import com.daklok.crescendo.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import com.daklok.crescendo.ui.common.Motion
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,23 +27,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Redo
-import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.AutoFixNormal
-import androidx.compose.material.icons.rounded.Category
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.CropSquare
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Highlight
-import androidx.compose.material.icons.rounded.HighlightAlt
-import androidx.compose.material.icons.rounded.HorizontalRule
-import androidx.compose.material.icons.rounded.OpenWith
-import androidx.compose.material.icons.rounded.RadioButtonUnchecked
-import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.AutoFixNormal
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Highlight
+import androidx.compose.material.icons.outlined.HighlightAlt
+import androidx.compose.material.icons.outlined.HorizontalRule
+import androidx.compose.material.icons.outlined.OpenWith
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -88,53 +99,58 @@ fun AnnotationToolbar(
         shadowElevation = 8.dp,
     ) {
         ToolbarContainer(vertical) {
-            ToolToggle(tool == InkTool.PEN, Icons.Rounded.Edit, "Pero") { controller.selectTool(InkTool.PEN) }
-            ToolToggle(tool == InkTool.HIGHLIGHTER, Icons.Rounded.Highlight, "Zvýrazňovač") {
+            ToolToggle(tool == InkTool.PEN, Icons.Outlined.Edit, stringResource(R.string.tool_pen)) { controller.selectTool(InkTool.PEN) }
+            ToolToggle(tool == InkTool.HIGHLIGHTER, Icons.Outlined.Highlight, stringResource(R.string.tool_highlighter)) {
                 controller.selectTool(InkTool.HIGHLIGHTER)
             }
-            ToolToggle(tool == InkTool.SHAPE, Icons.Rounded.Category, "Tvary") { controller.selectTool(InkTool.SHAPE) }
-            ToolToggle(tool == InkTool.LASSO, Icons.Rounded.HighlightAlt, "Výber (lasso)") {
+            ToolToggle(tool == InkTool.SHAPE, Icons.Outlined.Category, stringResource(R.string.tool_shapes)) { controller.selectTool(InkTool.SHAPE) }
+            ToolToggle(tool == InkTool.LASSO, Icons.Outlined.HighlightAlt, stringResource(R.string.tool_lasso)) {
                 controller.selectTool(InkTool.LASSO)
             }
-            ToolToggle(tool == InkTool.ERASER, Icons.Rounded.AutoFixNormal, "Guma") {
+            ToolToggle(tool == InkTool.ERASER, Icons.Outlined.AutoFixNormal, stringResource(R.string.tool_eraser)) {
                 controller.selectTool(InkTool.ERASER)
             }
 
-            if (tool == InkTool.PEN || tool == InkTool.HIGHLIGHTER || tool == InkTool.SHAPE) {
+            ToolSection(tool == InkTool.PEN || tool == InkTool.HIGHLIGHTER || tool == InkTool.SHAPE, vertical) {
                 Separator(vertical)
                 ColorButton(controller)
                 WidthButton(controller)
             }
 
-            if (tool == InkTool.SHAPE) {
+            ToolSection(tool == InkTool.ERASER, vertical) {
                 Separator(vertical)
-                ToolToggle(controller.shapeKind == ShapeKind.LINE, Icons.Rounded.HorizontalRule, "Čiara") {
+                EraserSizeButton(controller)
+            }
+
+            ToolSection(tool == InkTool.SHAPE, vertical) {
+                Separator(vertical)
+                ToolToggle(controller.shapeKind == ShapeKind.LINE, Icons.Outlined.HorizontalRule, stringResource(R.string.shape_line)) {
                     controller.shapeKind = ShapeKind.LINE
                 }
-                ToolToggle(controller.shapeKind == ShapeKind.RECT, Icons.Rounded.CropSquare, "Obdĺžnik") {
+                ToolToggle(controller.shapeKind == ShapeKind.RECT, Icons.Outlined.CropSquare, stringResource(R.string.shape_rect)) {
                     controller.shapeKind = ShapeKind.RECT
                 }
-                ToolToggle(controller.shapeKind == ShapeKind.ELLIPSE, Icons.Rounded.RadioButtonUnchecked, "Elipsa") {
+                ToolToggle(controller.shapeKind == ShapeKind.ELLIPSE, Icons.Outlined.RadioButtonUnchecked, stringResource(R.string.shape_ellipse)) {
                     controller.shapeKind = ShapeKind.ELLIPSE
                 }
             }
 
-            if (tool == InkTool.LASSO && controller.selection.isNotEmpty()) {
+            ToolSection(tool == InkTool.LASSO && controller.selection.isNotEmpty(), vertical) {
                 Separator(vertical)
                 IconButton(onClick = { controller.duplicateSelection() }) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Duplikovať výber")
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.selection_duplicate))
                 }
                 IconButton(onClick = { controller.deleteSelection() }) {
-                    Icon(Icons.Rounded.Delete, contentDescription = "Zmazať výber")
+                    Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.selection_delete))
                 }
             }
 
             Separator(vertical)
             IconButton(onClick = { controller.undo() }, enabled = controller.canUndo) {
-                Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "Späť")
+                Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = stringResource(R.string.undo))
             }
             IconButton(onClick = { controller.redo() }, enabled = controller.canRedo) {
-                Icon(Icons.AutoMirrored.Rounded.Redo, contentDescription = "Vpred")
+                Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = stringResource(R.string.redo))
             }
 
             Separator(vertical)
@@ -147,14 +163,14 @@ fun AnnotationToolbar(
                     checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 ),
             ) {
-                Icon(Icons.Rounded.TouchApp, contentDescription = "Kresliť prstom")
+                Icon(Icons.Outlined.TouchApp, contentDescription = stringResource(R.string.draw_with_finger))
             }
             IconButton(onClick = { confirmClear = true }) {
-                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Zmazať poznámky na strane")
+                Icon(Icons.Outlined.DeleteSweep, contentDescription = stringResource(R.string.clear_page_annotations))
             }
             PositionButton(position, onPositionChange)
             IconButton(onClick = onClose) {
-                Icon(Icons.Rounded.Close, contentDescription = "Zavrieť poznámky")
+                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.close_annotations))
             }
         }
     }
@@ -162,15 +178,15 @@ fun AnnotationToolbar(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Zmazať poznámky?") },
-            text = { Text("Všetky poznámky na zobrazenej strane sa zmažú. Dá sa to vrátiť tlačidlom Späť.") },
+            title = { Text(stringResource(R.string.clear_annotations_title)) },
+            text = { Text(stringResource(R.string.clear_annotations_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     pages.forEach { controller.clearPage(it) }
                     confirmClear = false
-                }) { Text("Zmazať") }
+                }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Zrušiť") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -302,13 +318,13 @@ private fun PositionButton(position: ToolbarPosition, onChange: (ToolbarPosition
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Rounded.OpenWith, contentDescription = "Poloha panela")
+            Icon(Icons.Outlined.OpenWith, contentDescription = stringResource(R.string.toolbar_position))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             ToolbarPosition.entries.forEach { p ->
                 DropdownMenuItem(
-                    text = { Text(p.label) },
-                    leadingIcon = { if (p == position) Icon(Icons.Rounded.Check, null) },
+                    text = { Text(stringResource(p.labelRes)) },
+                    leadingIcon = { if (p == position) Icon(Icons.Outlined.Check, null) },
                     onClick = {
                         onChange(p)
                         open = false
@@ -353,5 +369,87 @@ private fun WidthDot(diameter: Float, selected: Boolean, color: Color, onClick: 
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(diameter.dp).background(color, CircleShape))
+    }
+}
+
+/** Veľkosť gumy: ukážka aktuálneho kruhu, ťuk otvorí výber z troch veľkostí. */
+@Composable
+private fun EraserSizeButton(controller: AnnotationController) {
+    var open by remember { mutableStateOf(false) }
+    val sizes = AnnotationController.ERASER_SIZES
+    val dots = floatArrayOf(10f, 18f, 28f)
+    val idx = sizes.indexOfFirst { it == controller.eraserSize }.coerceAtLeast(0)
+    Box {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            EraserDot(dots[idx])
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                sizes.forEachIndexed { i, sz ->
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                if (i == idx) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                                CircleShape,
+                            )
+                            .clickable {
+                                controller.eraserSize = sz
+                                open = false
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EraserDot(dots[i])
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EraserDot(diameter: Float) {
+    Box(
+        Modifier
+            .size(diameter.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
+            .border(1.5.dp, MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
+    )
+}
+
+/**
+ * Skupina tlačidiel, ktorá sa podľa nástroja pružne rozbalí / zbalí,
+ * takže panel mení veľkosť plynulo namiesto skoku.
+ */
+@Composable
+private fun ToolSection(visible: Boolean, vertical: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(220, delayMillis = 60)) +
+            if (vertical) expandVertically(Motion.bouncy(), expandFrom = Alignment.Top)
+            else expandHorizontally(Motion.bouncy(), expandFrom = Alignment.Start),
+        exit = fadeOut(tween(120)) +
+            if (vertical) shrinkVertically(tween(220), shrinkTowards = Alignment.Top)
+            else shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start),
+    ) {
+        if (vertical) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) { content() }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) { content() }
+        }
     }
 }

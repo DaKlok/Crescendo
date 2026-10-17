@@ -6,6 +6,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -58,17 +61,18 @@ private val DarkScheme = darkColorScheme(
     onTertiary = Color(0xFF541D3A),
     tertiaryContainer = Color(0xFF6F334F),
     onTertiaryContainer = Color(0xFFFFD8E8),
-    background = Color(0xFF121316),
-    onBackground = Color(0xFFE4E1E6),
-    surface = Color(0xFF121316),
-    onSurface = Color(0xFFE4E1E6),
-    surfaceVariant = Color(0xFF46464F),
-    onSurfaceVariant = Color(0xFFC7C5D0),
-    surfaceContainerLowest = Color(0xFF0D0E11),
-    surfaceContainerLow = Color(0xFF1B1B1F),
-    surfaceContainer = Color(0xFF1F1F23),
-    surfaceContainerHigh = Color(0xFF2A2A2E),
-    surfaceContainerHighest = Color(0xFF353439),
+    // neutrálne, takmer čierne plochy (ako v Bible Lock Screen)
+    background = Color(0xFF121212),
+    onBackground = Color(0xFFEDEDED),
+    surface = Color(0xFF121212),
+    onSurface = Color(0xFFEDEDED),
+    surfaceVariant = Color(0xFF2C2C2C),
+    onSurfaceVariant = Color(0xFFC4C4C8),
+    surfaceContainerLowest = Color(0xFF0B0B0B),
+    surfaceContainerLow = Color(0xFF1C1C1C),
+    surfaceContainer = Color(0xFF242424),
+    surfaceContainerHigh = Color(0xFF2C2C2C),
+    surfaceContainerHighest = Color(0xFF383838),
     outline = Color(0xFF918F9A),
     outlineVariant = Color(0xFF46464F),
 )
@@ -140,6 +144,7 @@ fun CrescendoTheme(
     MaterialTheme(
         colorScheme = scheme,
         shapes = ExpressiveShapes,
+        typography = CrescendoTypography,
         content = content,
     )
 }
@@ -150,4 +155,18 @@ fun isDarkFor(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.SYSTEM -> isSystemInDarkTheme()
     ThemeMode.DARK -> true
     else -> false
+}
+
+/** Výraznejšie nadpisy (tučné, tesnejšie), telo textu ostáva štandardné. */
+private val CrescendoTypography = Typography().run {
+    copy(
+        displaySmall = displaySmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
+        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
+        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.25).sp),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.Bold),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.Bold),
+        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        titleSmall = titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold),
+    )
 }

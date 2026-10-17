@@ -18,9 +18,15 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 data class TrackingState(
     val faceDetected: Boolean = false,
+    /** Surové uhly (bez kalibrácie) – na kalibráciu a indikátor. */
     val yawDeg: Float = 0f,
+    val rollDeg: Float = 0f,
+    val pitchDeg: Float = 0f,
+    val leftEyeOpen: Float? = null,
+    val rightEyeOpen: Float? = null,
     val holdProgress: Float = 0f,
     val cooldownRemaining: Float = 0f,
+    val activeGesture: com.daklok.crescendo.data.GestureTrigger? = null,
 )
 
 /**
@@ -35,7 +41,7 @@ class HeadTracker : ImageAnalysis.Analyzer {
         FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL) // oči + úsmev
             .build()
     )
 
@@ -46,10 +52,17 @@ class HeadTracker : ImageAnalysis.Analyzer {
     val turns: SharedFlow<TurnDirection> = _turns.asSharedFlow()
 
     fun applySettings(s: AppSettings) {
-        detector.thresholdDeg = s.yawThresholdDeg
+        detector.actions = s.gestureMap
+        detector.turnThresholdDeg = s.yawThresholdDeg
+        detector.tiltThresholdDeg = s.tiltThresholdDeg
+        detector.nodThresholdDeg = s.nodThresholdDeg
+        detector.winkHoldMs = (s.winkHoldSec * 1000).toLong()
+        detector.swapEyes = s.swapEyes
+        detector.yawOffset = s.yawOffset
+        detector.rollOffset = s.rollOffset
+        detector.pitchOffset = s.pitchOffset
         detector.holdMs = (s.holdTimeSec * 1000).toLong()
         detector.cooldownMs = (s.cooldownSec * 1000).toLong()
-        detector.reverse = s.reverseDirection
     }
 
     @androidx.annotation.OptIn(ExperimentalGetImage::class)
@@ -63,13 +76,27 @@ class HeadTracker : ImageAnalysis.Analyzer {
         faceDetector.process(input)
             .addOnSuccessListener { faces ->
                 val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
-                val yaw = face?.headEulerAngleY
-                val out = detector.update(yaw, SystemClock.elapsedRealtime())
+                val sample = face?.let {
+                    FaceSample(
+                        yaw = it.headEulerAngleY,
+                        roll = it.headEulerAngleZ,
+                        pitch = it.headEulerAngleX,
+                        leftEyeOpen = it.leftEyeOpenProbability,
+                        rightEyeOpen = it.rightEyeOpenProbability,
+                        smile = it.smilingProbability,
+                    )
+                }
+                val out = detector.update(sample, SystemClock.elapsedRealtime())
                 _state.value = TrackingState(
                     faceDetected = face != null,
-                    yawDeg = yaw ?: 0f,
+                    yawDeg = sample?.yaw ?: 0f,
+                    rollDeg = sample?.roll ?: 0f,
+                    pitchDeg = sample?.pitch ?: 0f,
+                    leftEyeOpen = sample?.leftEyeOpen,
+                    rightEyeOpen = sample?.rightEyeOpen,
                     holdProgress = out.holdProgress,
                     cooldownRemaining = out.cooldownRemaining,
+                    activeGesture = out.activeGesture,
                 )
                 out.fired?.let { _turns.tryEmit(it) }
             }

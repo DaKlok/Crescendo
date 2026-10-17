@@ -1,5 +1,14 @@
 package com.daklok.crescendo.ui.reader
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.Icons
+import com.daklok.crescendo.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.camera.core.CameraSelector
@@ -39,6 +48,8 @@ import com.daklok.crescendo.data.AppSettings
 import com.daklok.crescendo.data.CameraChoice
 import com.daklok.crescendo.tracking.HeadTracker
 import com.daklok.crescendo.tracking.TurnDirection
+import com.daklok.crescendo.data.GestureKind
+import com.daklok.crescendo.data.usesKind
 import java.util.concurrent.Executors
 
 fun hasCameraPermission(context: android.content.Context): Boolean =
@@ -52,6 +63,8 @@ fun hasCameraPermission(context: android.content.Context): Boolean =
 fun HeadTrackingOverlay(
     settings: AppSettings,
     onTurn: (TurnDirection) -> Unit,
+    /** Uloží aktuálnu polohu hlavy ako „rovno“ (yaw, roll, pitch v stupňoch). */
+    onCalibrate: (Float, Float, Float) -> Unit,
     modifier: Modifier = Modifier,
     /** false = sledovanie beží ďalej, ale nič sa nezobrazuje (napr. v režime celej obrazovky). */
     visible: Boolean = true,
@@ -114,7 +127,7 @@ fun HeadTrackingOverlay(
     if (!visible) return
 
     Surface(
-        modifier = modifier.size(width = 220.dp, height = 190.dp),
+        modifier = modifier.width(232.dp),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 6.dp,
@@ -142,11 +155,19 @@ fun HeadTrackingOverlay(
                     )
                 }
             }
-            YawBar(
-                yaw = state.yawDeg,
-                threshold = settings.yawThresholdDeg,
-                faceDetected = state.faceDetected,
-            )
+            // ukazovateľ hlavného zapnutého gesta (po kalibrácii)
+            when {
+                settings.gestureMap.usesKind(GestureKind.TURN) -> AngleBar(state.yawDeg - settings.yawOffset, settings.yawThresholdDeg, state.faceDetected)
+                settings.gestureMap.usesKind(GestureKind.TILT) -> AngleBar(-(state.rollDeg - settings.rollOffset), settings.tiltThresholdDeg, state.faceDetected)
+                settings.gestureMap.usesKind(GestureKind.NOD) -> AngleBar(state.pitchDeg - settings.pitchOffset, settings.nodThresholdDeg, state.faceDetected)
+            }
+            if (settings.gestureMap.usesKind(GestureKind.WINK)) {
+                EyeIndicator(
+                    left = if (settings.swapEyes) state.rightEyeOpen else state.leftEyeOpen,
+                    right = if (settings.swapEyes) state.leftEyeOpen else state.rightEyeOpen,
+                    faceDetected = state.faceDetected,
+                )
+            }
             LinearProgressIndicator(
                 progress = { state.holdProgress },
                 modifier = Modifier
@@ -156,21 +177,36 @@ fun HeadTrackingOverlay(
             )
             Text(
                 when {
-                    !state.faceDetected -> "Nevidím tvár"
-                    state.cooldownRemaining > 0f -> "Pauza…"
-                    else -> "Otoč hlavu"
+                    !state.faceDetected -> stringResource(R.string.tracking_no_face)
+                    state.cooldownRemaining > 0f -> stringResource(R.string.tracking_pause)
+                    else -> stringResource(R.string.tracking_ready)
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
+            if (settings.gestureMap.usesKind(GestureKind.TURN) || settings.gestureMap.usesKind(GestureKind.TILT) || settings.gestureMap.usesKind(GestureKind.NOD)) {
+                val haptic = com.daklok.crescendo.ui.common.rememberHaptic()
+                TextButton(
+                    onClick = {
+                        haptic(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        onCalibrate(state.yawDeg, state.rollDeg, state.pitchDeg)
+                    },
+                    enabled = state.faceDetected,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Icon(Icons.Outlined.CenterFocusStrong, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.calibrate), style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
     }
 }
 
 /** Vodorovný pás: stred = rovno, značky = prah spustenia, bodka = aktuálne natočenie. */
 @Composable
-private fun YawBar(yaw: Float, threshold: Float, faceDetected: Boolean) {
+private fun AngleBar(yaw: Float, threshold: Float, faceDetected: Boolean) {
     val range = (threshold * 1.8f).coerceAtLeast(10f)
     val pos = ((yaw / range).coerceIn(-1f, 1f) + 1f) / 2f
     val thrPos = (threshold / range).coerceIn(0f, 1f) / 2f
@@ -200,6 +236,26 @@ private fun YawBar(yaw: Float, threshold: Float, faceDetected: Boolean) {
                 radius = h / 2 - 1f,
                 center = androidx.compose.ui.geometry.Offset(size.width * pos, h / 2),
             )
+        }
+    }
+}
+
+/** Dve bodky = oči; plná = otvorené, prázdna = zavreté. Ľavá bodka = ľavé oko človeka. */
+@Composable
+private fun EyeIndicator(left: Float?, right: Float?, faceDetected: Boolean) {
+    val on = MaterialTheme.colorScheme.primary
+    val off = MaterialTheme.colorScheme.outline
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(left, right).forEach { p ->
+            val open = faceDetected && (p ?: 1f) > 0.5f
+            androidx.compose.foundation.Canvas(Modifier.size(16.dp)) {
+                if (open) drawCircle(on)
+                else drawCircle(off, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            }
         }
     }
 }

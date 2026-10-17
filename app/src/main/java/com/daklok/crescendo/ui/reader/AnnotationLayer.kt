@@ -107,7 +107,9 @@ fun AnnotationLayer(
                     when (mode) {
                         MODE_ERASE -> {
                             controller.beginErase()
-                            controller.eraseAt(page, x0, y0, ratio)
+                            controller.eraserCursorPage = page
+                            controller.eraserCursor = Offset(x0, y0)
+                            controller.eraseAt(page, x0, y0, x0, y0, ratio)
                         }
                         MODE_LASSO -> {
                             controller.clearSelection()
@@ -171,7 +173,11 @@ fun AnnotationLayer(
                             val nx = c.position.x / w
                             val ny = c.position.y / h
                             when (mode) {
-                                MODE_ERASE -> controller.eraseAt(page, nx, ny, ratio)
+                                MODE_ERASE -> {
+                                    // úsek od poslednej polohy, aby rýchly pohyb nevynechal miesta
+                                    controller.eraseAt(page, last.x / w, last.y / h, nx, ny, ratio)
+                                    controller.eraserCursor = Offset(nx, ny)
+                                }
                                 MODE_MOVE -> {
                                     controller.moveDx += (c.position.x - last.x) / w
                                     controller.moveDy += (c.position.y - last.y) / h
@@ -269,6 +275,19 @@ fun AnnotationLayer(
                 } else {
                     drawInk(InkStroke(liveTool[0], liveColor[0], liveWidth[0], live.toFloatArray()), null)
                 }
+            }
+            // kruh gumy pod perom/prstom
+            val cursor = controller.eraserCursor
+            if (cursor != null && controller.eraserCursorPage == page) {
+                val c = Offset(cursor.x * size.width, cursor.y * size.height)
+                val rad = controller.eraserSize / 2f * size.width
+                drawCircle(color = Color.White.copy(alpha = 0.55f), radius = rad, center = c)
+                drawCircle(
+                    color = Color(0xFF5F6368),
+                    radius = rad,
+                    center = c,
+                    style = Stroke(width = 1.5f * density),
+                )
             }
             if (controller.selectionPage == page) {
                 controller.selectionBounds(ratio)?.let { b ->

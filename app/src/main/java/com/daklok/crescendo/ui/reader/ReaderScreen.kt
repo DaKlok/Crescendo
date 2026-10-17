@@ -1,5 +1,13 @@
 package com.daklok.crescendo.ui.reader
 
+import com.daklok.crescendo.ui.settings.GestureSettingsSheet
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.focusable
+import com.daklok.crescendo.R
+import androidx.compose.ui.res.stringResource
 import android.app.Activity
 import android.content.res.Configuration
 import android.Manifest
@@ -30,11 +38,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Draw
-import androidx.compose.material.icons.rounded.Face
-import androidx.compose.material.icons.rounded.Fullscreen
-import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Draw
+import androidx.compose.material.icons.outlined.Face
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -76,6 +84,16 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daklok.crescendo.data.ToolbarPosition
+import com.daklok.crescendo.ui.common.Motion
+import com.daklok.crescendo.ui.common.TonalIconButton
+import com.daklok.crescendo.ui.common.rememberHaptic
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.text.font.FontWeight
 import com.daklok.crescendo.tracking.TurnDirection
 import kotlinx.coroutines.launch
 
@@ -98,9 +116,9 @@ fun ReaderScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(ui.error ?: "Chyba", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text(stringResource(ui.errorRes ?: R.string.error_title), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
             Spacer(Modifier.padding(8.dp))
-            FilledTonalButton(onClick = onBack) { Text("Späť do knižnice") }
+            FilledTonalButton(onClick = onBack) { Text(stringResource(R.string.back_to_library)) }
         }
         else -> ReaderContent(
             vm = vm,
@@ -127,6 +145,10 @@ private fun ReaderContent(
     val context = LocalContext.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
+    val haptic = rememberHaptic()
+    val keyFocus = remember { FocusRequester() }
+    var gestureSheetOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { runCatching { keyFocus.requestFocus() } }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val spread = settings.twoPageSpread && landscape && pageCount > 1
     val perScreen = if (spread) 2 else 1
@@ -212,11 +234,16 @@ private fun ReaderContent(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            // klávesnica a Bluetooth pedály (posielajú šípky / PageUp / PageDown)
+            .focusRequester(keyFocus)
+            .focusable()
             .onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val volume = e.key == Key.VolumeDown || e.key == Key.VolumeUp
+                if (volume && !settings.volumeKeysTurn) return@onPreviewKeyEvent false
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent volume
                 when (e.key) {
-                    Key.DirectionRight, Key.PageDown, Key.Spacebar, Key.VolumeDown -> { next(); true }
-                    Key.DirectionLeft, Key.PageUp, Key.VolumeUp -> { previous(); true }
+                    Key.DirectionRight, Key.DirectionDown, Key.PageDown, Key.Spacebar, Key.Enter, Key.VolumeDown -> { next(); true }
+                    Key.DirectionLeft, Key.DirectionUp, Key.PageUp, Key.VolumeUp -> { previous(); true }
                     else -> false
                 }
             },
@@ -294,65 +321,84 @@ private fun ReaderContent(
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            FilledTonalButton(onClick = { zoom = 1f; pan = Offset.Zero }) {
-                Text("${(zoom * 100).toInt()} %  ·  Obnoviť")
+            FilledTonalButton(
+                onClick = {
+                    haptic(HapticFeedbackType.LongPress)
+                    zoom = 1f
+                    pan = Offset.Zero
+                },
+                shape = RoundedCornerShape(20.dp),
+            ) {
+                Text(stringResource(R.string.zoom_reset, (zoom * 100).toInt()))
             }
         }
 
-        // Horná lišta
+        // Horná lišta – plávajúca „pilulka“ s tonálnymi tlačidlami
         AnimatedVisibility(
             visible = chromeVisible,
             modifier = Modifier.align(Alignment.TopCenter),
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
+            enter = fadeIn(tween(220)) + slideInVertically(Motion.bouncy()) { -it } +
+                scaleIn(initialScale = 0.94f, animationSpec = Motion.bouncy()),
+            exit = fadeOut(tween(180)) + slideOutVertically(tween(220)) { -it },
         ) {
             Surface(
                 modifier = Modifier
                     .statusBarsPadding()
                     .padding(16.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f),
                 tonalElevation = 3.dp,
-                shadowElevation = 6.dp,
+                shadowElevation = 8.dp,
             ) {
                 Row(
-                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Späť")
-                    }
+                    TonalIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        onClick = onBack,
+                    )
                     Text(
                         title,
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        modifier = Modifier.widthIn(max = 420.dp).padding(horizontal = 8.dp),
+                        modifier = Modifier
+                            .widthIn(max = 420.dp)
+                            .padding(horizontal = 8.dp),
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    FilledIconToggleButton(
-                        checked = trackingActive,
-                        onCheckedChange = { on ->
+                    TonalIconButton(
+                        icon = Icons.Outlined.Face,
+                        contentDescription = stringResource(R.string.head_tracking),
+                        highlighted = trackingActive,
+                        onClick = {
+                            val on = !trackingActive
                             if (on && !cameraPermission) {
                                 permissionLauncher.launch(Manifest.permission.CAMERA)
                             } else {
                                 vm.update { it.copy(headTrackingEnabled = on) }
                             }
                         },
-                    ) {
-                        Icon(Icons.Rounded.Face, contentDescription = "Otáčanie hlavou")
-                    }
-                    FilledIconToggleButton(
-                        checked = vm.annotations.enabled,
-                        onCheckedChange = { vm.annotations.enabled = it },
-                    ) {
-                        Icon(Icons.Rounded.Draw, contentDescription = "Poznámky")
-                    }
-                    IconButton(onClick = { immersive = !immersive; chromeVisible = false }) {
-                        Icon(
-                            if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
-                            contentDescription = "Celá obrazovka",
-                        )
-                    }
+                    )
+                    TonalIconButton(
+                        icon = Icons.Outlined.Tune,
+                        contentDescription = stringResource(R.string.gesture_settings),
+                        onClick = { gestureSheetOpen = true },
+                    )
+                    TonalIconButton(
+                        icon = Icons.Outlined.Draw,
+                        contentDescription = stringResource(R.string.annotations),
+                        highlighted = vm.annotations.enabled,
+                        onClick = { vm.annotations.enabled = !vm.annotations.enabled },
+                    )
+                    TonalIconButton(
+                        icon = if (immersive) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
+                        contentDescription = stringResource(R.string.fullscreen),
+                        onClick = { immersive = !immersive; chromeVisible = false },
+                    )
                 }
             }
         }
@@ -361,34 +407,67 @@ private fun ReaderContent(
         AnimatedVisibility(
             visible = chromeVisible && screenCount > 1,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
+            enter = fadeIn(tween(220)) + slideInVertically(Motion.bouncy()) { it } +
+                scaleIn(initialScale = 0.94f, animationSpec = Motion.bouncy()),
+            exit = fadeOut(tween(180)) + slideOutVertically(tween(220)) { it },
         ) {
             Surface(
                 modifier = Modifier
                     .navigationBarsPadding()
                     .padding(16.dp)
-                    .widthIn(max = 640.dp)
+                    .widthIn(max = 680.dp)
                     .fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f),
                 tonalElevation = 3.dp,
-                shadowElevation = 6.dp,
+                shadowElevation = 8.dp,
             ) {
                 Row(
-                    Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    Modifier.padding(start = 10.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val first = pager.currentPage * perScreen + 1
                     val label = if (spread && first + 1 <= pageCount) "$first–${first + 1}" else "$first"
-                    Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(56.dp))
+                    // číslo strany v pilulke; pri zmene sa prevalí
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        AnimatedContent(
+                            targetState = label,
+                            transitionSpec = {
+                                (slideInVertically(Motion.bouncy()) { it / 2 } + fadeIn(tween(160))) togetherWith
+                                    (slideOutVertically(tween(160)) { -it / 2 } + fadeOut(tween(120)))
+                            },
+                            label = "pageLabel",
+                        ) { l ->
+                            Text(
+                                l,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Slider(
                         value = pager.currentPage.toFloat(),
-                        onValueChange = { scope.launch { pager.scrollToPage(it.toInt()) } },
+                        onValueChange = {
+                            val target = it.toInt()
+                            if (target != pager.currentPage) {
+                                haptic(HapticFeedbackType.TextHandleMove)
+                                scope.launch { pager.scrollToPage(target) }
+                            }
+                        },
                         valueRange = 0f..(screenCount - 1).coerceAtLeast(1).toFloat(),
                         modifier = Modifier.weight(1f),
                     )
-                    Text("$pageCount", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 12.dp))
+                    Text(
+                        "$pageCount",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
                 }
             }
         }
@@ -443,12 +522,25 @@ private fun ReaderContent(
                 settings = settings,
                 visible = !immersive,
                 onTurn = { dir ->
+                    if (settings.turnHaptic) haptic(HapticFeedbackType.LongPress)
                     if (dir == TurnDirection.NEXT) next() else previous()
+                },
+                onCalibrate = { yaw, roll, pitch ->
+                    vm.update { it.copy(yawOffset = yaw, rollOffset = roll, pitchOffset = pitch) }
                 },
                 modifier = Modifier
                     .align(if (toolbarRight) Alignment.BottomStart else Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(bottom = if (chromeVisible) 88.dp else 16.dp, end = 16.dp, start = 16.dp),
+            )
+        }
+
+        // Nastavenia gest priamo v čítačke (rovnaké ako v Nastaveniach, zosynchronizované)
+        if (gestureSheetOpen) {
+            GestureSettingsSheet(
+                settings = settings,
+                update = { t -> vm.update(t) },
+                onDismiss = { gestureSheetOpen = false },
             )
         }
     }
