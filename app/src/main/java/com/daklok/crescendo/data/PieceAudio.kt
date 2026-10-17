@@ -133,7 +133,7 @@ class PieceAudio(private val context: Context) {
         prefs.edit().remove("sel_$pieceId").apply()
         File(File(context.filesDir, "recordings"), pieceId.toString()).deleteRecursively()
         com.daklok.crescendo.data.midi.MidiRenderer.deleteForPiece(context, pieceId)
-        PieceMidi(context).delete(pieceId)
+        PieceMidi(context).deleteAll(pieceId)
     }
 }
 

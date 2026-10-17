@@ -21,6 +21,11 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Forward10
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Add
+import kotlin.math.roundToInt
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Delete
@@ -44,6 +49,9 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -139,7 +147,7 @@ fun VisualizerPanel(
     var running by remember { mutableStateOf(false) }
 
     // režim „čakaj na mňa“; zbalený panel (len klaviatúra)
-    var waitMode by rememberSaveable { mutableStateOf(false) }
+    val waitMode = false // režim „čakaj na mňa“ bol odstránený
     var collapsed by rememberSaveable { mutableStateOf(false) }
     var seekVersion by remember { mutableIntStateOf(0) }
     val instruments by app.midi.instruments.collectAsStateWithLifecycle()
@@ -274,7 +282,7 @@ fun VisualizerPanel(
         stopPlayback()
         player.release()
         scope.launch {
-            val f = app.pieceMidi.import(pieceId, uri)
+            val f = app.pieceMidi.import(pieceId, uri, name)
             importError = f == null
             if (f != null) {
                 clock = 0.0
@@ -287,23 +295,23 @@ fun VisualizerPanel(
     val importMidi = { pickMidi.launch(arrayOf("audio/midi", "audio/x-midi", "audio/mid", "application/x-midi", "*/*")) }
     // skladba z katalógu stiahnutá pred touto verziou – MIDI sa dá doplniť jedným ťuknutím
     var catalogItem by remember { mutableStateOf<com.daklok.crescendo.data.CatalogItem?>(null) }
-    LaunchedEffect(pieceId, hasMidi) { if (!hasMidi) catalogItem = app.catalog.itemForPiece(pieceId) }
+    LaunchedEffect(pieceId) { catalogItem = app.catalog.itemForPiece(pieceId) }
     val fromCatalog: (() -> Unit)? = catalogItem?.let { item ->
         { app.appScope.launch { runCatching { app.catalog.attachReference(item, pieceId, app.pieceAudio) } }; Unit }
     }
-    val latestRecording = remember(pieceId, midiVersion) {
-        app.pieceAudio.recordings(pieceId).firstOrNull { it.extension.equals("mid", true) }
+    // všetky MIDI ku skladbe (katalóg, importované, nahrávky z klavíra) – prepínajú sa bez mazania
+    val sources = remember(pieceId, midiVersion) { app.pieceMidi.sources(pieceId) }
+    val selectedKey = remember(pieceId, midiVersion) { app.pieceMidi.selected(pieceId)?.key }
+    var confirmRemove by remember { mutableStateOf<com.daklok.crescendo.data.MidiSource?>(null) }
+    fun chooseSource(key: String) {
+        if (key == selectedKey) return
+        stopPlayback()
+        player.release()
+        clock = 0.0
+        app.pieceMidi.select(pieceId, key)
     }
-    val useRecording: (() -> Unit)? = latestRecording?.let { rec ->
-        {
-            stopPlayback()
-            player.release()
-            scope.launch {
-                app.pieceMidi.setFrom(pieceId, rec, "")
-                clock = 0.0
-            }
-        }
-    }
+    val latestRecording = sources.firstOrNull { it.kind == com.daklok.crescendo.data.MidiSourceKind.RECORDING }
+    val useRecording: (() -> Unit)? = latestRecording?.let { rec -> { chooseSource(rec.key) } }
 
     Surface(
         modifier = modifier,
@@ -341,43 +349,21 @@ fun VisualizerPanel(
                         )
                     }
                 }
-                if (hasMidi) {
-                    Box {
-                        var menu by remember { mutableStateOf(false) }
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.more)) }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(16.dp)) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.vis_import)) },
-                                leadingIcon = { Icon(Icons.Outlined.FileOpen, null) },
-                                onClick = {
-                                    menu = false
-                                    importMidi()
-                                },
-                            )
-                            if (useRecording != null) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.vis_use_recording)) },
-                                    leadingIcon = { Icon(Icons.Outlined.Piano, null) },
-                                    onClick = {
-                                        menu = false
-                                        useRecording()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.vis_remove)) },
-                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                onClick = {
-                                    menu = false
-                                    stopPlayback()
-                                    player.release()
-                                    app.pieceMidi.delete(pieceId)
-                                },
-                            )
-                        }
-                    }
-                }
                 IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
+            }
+
+            // odkiaľ sú noty – rýchle prepínanie medzi katalógom, importovanými súbormi a nahrávkami z klavíra
+            if (hasMidi) {
+                SourcePicker(
+                    sources = sources,
+                    selectedKey = selectedKey,
+                    onSelect = { chooseSource(it) },
+                    onRemove = { confirmRemove = it },
+                    onImport = importMidi,
+                    // MIDI z katalógu bolo odstránené – dá sa stiahnuť znova
+                    onFromCatalog = if (refJobs[pieceId] == null && sources.none { it.kind == com.daklok.crescendo.data.MidiSourceKind.CATALOG }) fromCatalog else null,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
+                )
             }
 
             val s = song
@@ -427,60 +413,66 @@ fun VisualizerPanel(
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    val options: @Composable () -> Unit = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // ovládanie ako vo videu: prehrať / stop / 10 s späť / 10 s dopredu
+                    val transport: @Composable () -> Unit = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            androidx.compose.material3.FilledTonalIconButton(
+                                onClick = {
+                                    stopPlayback()
+                                    seekTo(0.0)
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) { Icon(Icons.Outlined.Stop, stringResource(R.string.vis_stop)) }
+                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock - 10) }, modifier = Modifier.size(52.dp)) {
+                                Icon(Icons.Outlined.Replay10, stringResource(R.string.vis_back10), Modifier.size(26.dp))
+                            }
                             PlayButton(
                                 progress = soundProgress,
                                 running = running,
                                 onClick = { if (running) stopPlayback() else startPlayback() },
                             )
-                            androidx.compose.material3.FilledTonalIconButton(onClick = {
-                                stopPlayback()
-                                seekTo(0.0)
-                            }) { Icon(Icons.Outlined.Stop, stringResource(R.string.vis_stop)) }
-                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock - 10) }) {
-                                Icon(Icons.Outlined.Replay10, stringResource(R.string.vis_back10))
+                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock + 10) }, modifier = Modifier.size(52.dp)) {
+                                Icon(Icons.Outlined.Forward10, stringResource(R.string.vis_fwd10), Modifier.size(26.dp))
                             }
-                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock + 10) }) {
-                                Icon(Icons.Outlined.Forward10, stringResource(R.string.vis_fwd10))
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            listOf(0.5f, 0.75f, 1f).forEach { sp ->
-                                FilterChip(
-                                    selected = speed == sp,
-                                    onClick = {
+                        }
+                    }
+                    // rýchlosť – jeden posuvník (40–150 %), ťuk na percentá = späť na 100 %
+                    val speedRow: @Composable (Modifier) -> Unit = { m ->
+                        Row(m, verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Speed, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Slider(
+                                value = speed,
+                                onValueChange = { v ->
+                                    val sp = (v * 20).roundToInt() / 20f
+                                    if (sp != speed) {
                                         speed = sp
                                         player.setPlaybackSpeed(sp)
-                                    },
-                                    label = { Text("${(sp * 100).toInt()} %") },
-                                    shape = RoundedCornerShape(12.dp),
-                                )
-                            }
-                            FilterChip(
-                                selected = waitMode && pianoConnected,
-                                enabled = pianoConnected,
-                                onClick = {
-                                    val was = running
-                                    stopPlayback()
-                                    waitMode = !waitMode
-                                    if (was) startPlayback()
+                                    }
                                 },
-                                label = { Text(stringResource(R.string.vis_wait_mode)) },
-                                leadingIcon = { Icon(Icons.Outlined.HourglassTop, null, Modifier.size(16.dp)) },
-                                shape = RoundedCornerShape(12.dp),
+                                valueRange = 0.4f..1.5f,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp),
                             )
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    speed = 1f
+                                    player.setPlaybackSpeed(1f)
+                                },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                            ) { Text("${(speed * 100).roundToInt()} %", fontWeight = FontWeight.Bold) }
                         }
                     }
                     if (compact) {
-                        androidx.compose.foundation.lazy.LazyRow { item { options() } }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                        speedRow(Modifier.fillMaxWidth())
                     } else {
-                        options()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            transport()
+                            Spacer(Modifier.width(20.dp))
+                            speedRow(Modifier.weight(1f))
+                        }
                     }
                     val hint = when {
-                        waitMode && pianoConnected && waitingFor.isNotEmpty() ->
-                            stringResource(R.string.vis_waiting_for, waitingFor.sorted().joinToString(" · ") { noteLabel(it) })
-                        waitMode && !pianoConnected -> stringResource(R.string.vis_wait_needs_piano)
                         !pianoConnected -> stringResource(R.string.vis_connect_hint)
                         else -> null
                     }
@@ -499,21 +491,47 @@ fun VisualizerPanel(
             }
         }
     }
+
+    confirmRemove?.let { src ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmRemove = null },
+            shape = RoundedCornerShape(28.dp),
+            icon = { Icon(Icons.Outlined.Delete, null) },
+            title = { Text(stringResource(R.string.vis_source_remove_title)) },
+            text = { Text(stringResource(R.string.vis_source_remove_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (src.key == selectedKey) {
+                        stopPlayback()
+                        player.release()
+                        clock = 0.0
+                    }
+                    app.pieceMidi.remove(pieceId, src)
+                    confirmRemove = null
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 /** Prehrať / pauza; kým sa zvuk vyrába, krúžok s priebehom. */
 @Composable
 private fun PlayButton(progress: Float, running: Boolean, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
         when {
-            progress > -2f && progress < 0f -> CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.5.dp)
+            progress > -2f && progress < 0f -> CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp)
             progress >= 0f -> CircularProgressIndicator(
                 progress = { progress.coerceAtLeast(0.02f) },
-                modifier = Modifier.size(28.dp),
-                strokeWidth = 3.dp,
+                modifier = Modifier.size(40.dp),
+                strokeWidth = 3.5.dp,
             )
-            else -> FilledIconButton(onClick = onClick) {
-                Icon(if (running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null)
+            else -> FilledIconButton(
+                onClick = onClick,
+                modifier = Modifier.size(68.dp),
+                shape = RoundedCornerShape(if (running) 20.dp else 34.dp),
+            ) {
+                Icon(if (running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null, Modifier.size(34.dp))
             }
         }
     }
@@ -702,3 +720,154 @@ private fun lerpBlackSoon(black: Color, accent: Color): Color =
 
 /** Tmavší odtieň farby (noty na čiernych klávesoch). */
 private fun lerpDark(c: Color): Color = Color(c.red * 0.72f, c.green * 0.72f, c.blue * 0.72f, c.alpha)
+
+/** Názov zdroja MIDI na zobrazenie. */
+@Composable
+private fun sourceTitle(src: com.daklok.crescendo.data.MidiSource): String = when (src.kind) {
+    com.daklok.crescendo.data.MidiSourceKind.CATALOG -> stringResource(R.string.vis_source_catalog)
+    com.daklok.crescendo.data.MidiSourceKind.IMPORTED -> src.label
+    com.daklok.crescendo.data.MidiSourceKind.RECORDING -> stringResource(R.string.vis_source_recording)
+}
+
+@Composable
+private fun sourceSubtitle(src: com.daklok.crescendo.data.MidiSource): String {
+    val date = remember(src.added) {
+        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(src.added))
+    }
+    return when (src.kind) {
+        com.daklok.crescendo.data.MidiSourceKind.CATALOG -> stringResource(R.string.vis_source_catalog_desc)
+        com.daklok.crescendo.data.MidiSourceKind.IMPORTED -> stringResource(R.string.vis_source_imported, date)
+        com.daklok.crescendo.data.MidiSourceKind.RECORDING -> date
+    }
+}
+
+private fun sourceIcon(src: com.daklok.crescendo.data.MidiSource) = when (src.kind) {
+    com.daklok.crescendo.data.MidiSourceKind.CATALOG -> Icons.Outlined.AutoAwesome
+    com.daklok.crescendo.data.MidiSourceKind.IMPORTED -> Icons.Outlined.FileOpen
+    com.daklok.crescendo.data.MidiSourceKind.RECORDING -> Icons.Outlined.Piano
+}
+
+/**
+ * Výber, z ktorého MIDI sú noty: tlačidlo s práve vybraným zdrojom, po ťuknutí zoznam všetkých
+ * (vybraný má fajku). Importované a z katalógu sa dajú odstrániť, pridať nový súbor ide dole v zozname.
+ */
+@Composable
+private fun SourcePicker(
+    sources: List<com.daklok.crescendo.data.MidiSource>,
+    selectedKey: String?,
+    onSelect: (String) -> Unit,
+    onRemove: (com.daklok.crescendo.data.MidiSource) -> Unit,
+    onImport: () -> Unit,
+    onFromCatalog: (() -> Unit)?,
+    modifier: Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val current = sources.firstOrNull { it.key == selectedKey }
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(50),
+            color = scheme.secondaryContainer,
+            contentColor = scheme.onSecondaryContainer,
+        ) {
+            Row(
+                Modifier.padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(current?.let { sourceIcon(it) } ?: Icons.Outlined.Piano, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.vis_source_label),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSecondaryContainer.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    current?.let { sourceTitle(it) } ?: "—",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 260.dp),
+                )
+                if (sources.size > 1) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${sources.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimary,
+                        modifier = Modifier
+                            .background(scheme.primary, CircleShape)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+                Icon(Icons.Outlined.ExpandMore, null, Modifier.size(20.dp))
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(20.dp)) {
+            Text(
+                stringResource(R.string.vis_source_menu_title),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            sources.forEach { src ->
+                val selected = src.key == selectedKey
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                sourceTitle(src),
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(sourceSubtitle(src), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, maxLines = 1)
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            if (selected) Icons.Outlined.CheckCircle else sourceIcon(src),
+                            null,
+                            tint = if (selected) scheme.primary else scheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = if (src.kind != com.daklok.crescendo.data.MidiSourceKind.RECORDING) {
+                        {
+                            IconButton(onClick = {
+                                open = false
+                                onRemove(src)
+                            }) { Icon(Icons.Outlined.Delete, stringResource(R.string.delete), tint = scheme.onSurfaceVariant) }
+                        }
+                    } else null,
+                    onClick = {
+                        open = false
+                        onSelect(src.key)
+                    },
+                )
+            }
+            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            if (onFromCatalog != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.vis_from_catalog)) },
+                    leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
+                    onClick = {
+                        open = false
+                        onFromCatalog()
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.vis_import)) },
+                leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                onClick = {
+                    open = false
+                    onImport()
+                },
+            )
+        }
+    }
+}

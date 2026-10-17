@@ -117,7 +117,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.HorizontalDivider
 import java.io.File
+import kotlin.math.roundToInt
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -296,6 +299,7 @@ class Recorder(private val context: Context) {
             return null
         }
         MidiRenderer.request(context, f)
+        com.daklok.crescendo.data.PieceMidi.notifyChanged() // nová nahrávka sa dá vybrať vo vizualizéri
         return f
     }
 
@@ -358,6 +362,7 @@ fun AudioPanel(
     var micDenied by remember { mutableStateOf(false) }
     // potvrdenie pred zmazaním / nahradením – nahrávky sa nedajú zmazať omylom
     var confirmDeleteRecording by remember { mutableStateOf<File?>(null) }
+    var tab by rememberSaveable { mutableIntStateOf(0) } // 0 = Nahrávky, 1 = Moje nahrávky
     var confirmDeleteReference by remember { mutableStateOf<com.daklok.crescendo.data.ReferenceAudio?>(null) }
     var renameReference by remember { mutableStateOf<com.daklok.crescendo.data.ReferenceAudio?>(null) }
 
@@ -405,7 +410,7 @@ fun AudioPanel(
         pendingRecord = false
     }
 
-    // prehrávač: ak nič nehrá, pripraví sa vybraná referenčná nahrávka (bez spustenia)
+    // prehrávač: ak nič nie je načítané, pripraví sa vybraná referenčná nahrávka (bez spustenia)
     LaunchedEffect(reference, version) {
         if (player.file == null || (player.file?.exists() != true)) reference?.let { player.load(it) }
     }
@@ -428,8 +433,7 @@ fun AudioPanel(
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     fun recordingTitle(f: File) = f.nameWithoutExtension.toLongOrNull()?.let { dateFormat.format(Date(it)) } ?: f.name
     val officialLabel = stringResource(R.string.reference_official)
-
-    // čo práve hrá (názov do prehrávača)
+    // čo je v prehrávači (názov a odkiaľ je)
     val nowFile = player.file
     val nowRef = references.firstOrNull { it.file.path == nowFile?.path }
     val nowRec = recordings.firstOrNull { playables[it]?.path == nowFile?.path }
@@ -437,6 +441,11 @@ fun AudioPanel(
         nowRef != null -> if (nowRef.official) officialLabel else nowRef.label
         nowRec != null -> recordingTitle(nowRec)
         else -> null
+    }
+    val nowSource = when {
+        nowRef != null -> stringResource(R.string.audio_tab_recordings)
+        nowRec != null -> stringResource(R.string.audio_my_recordings)
+        else -> ""
     }
 
     fun playReference(ref: com.daklok.crescendo.data.ReferenceAudio) {
@@ -462,11 +471,15 @@ fun AudioPanel(
         }
     }
 
-    val maxHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.78f).dp
+    val screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
+    val maxHeight = (screenH * (if (nowTitle != null) 0.52f else 0.78f)).dp
+    Column(modifier.widthIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // prehrávač – samostatná „pilulka“ nad panelom, hrá čokoľvek si vyberieš (z oboch záložiek)
+    androidx.compose.animation.AnimatedVisibility(visible = nowTitle != null) {
+        if (nowTitle != null) PlayerPill(player, nowTitle, nowSource)
+    }
     Surface(
-        modifier = modifier
-            .widthIn(max = 420.dp)
-            .heightIn(max = maxHeight),
+        modifier = Modifier.heightIn(max = maxHeight),
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
         tonalElevation = 3.dp,
@@ -491,11 +504,24 @@ fun AudioPanel(
                     .padding(horizontal = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // ── 1. prehrávač ──
-                NowPlayingCard(player = player, title = nowTitle)
+                // prepínač: Nahrávky (na počúvanie) / Moje nahrávky
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                        icon = { Icon(Icons.Outlined.LibraryMusic, null, Modifier.size(18.dp)) },
+                    ) { Text(stringResource(R.string.audio_tab_recordings), maxLines = 1) }
+                    SegmentedButton(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                        icon = { Icon(Icons.Outlined.Mic, null, Modifier.size(18.dp)) },
+                    ) { Text(stringResource(R.string.audio_my_recordings), maxLines = 1) }
+                }
 
-                // ── 2. na počúvanie (referenčné nahrávky) ──
-                SectionLabel(Icons.Outlined.LibraryMusic, stringResource(R.string.audio_listen_section))
+                if (tab == 0) {
+                // ── Nahrávky (referenčné) ──
                 if (refJob != null) {
                     JobCard(
                         text = if (refJob < 0) stringResource(R.string.ref_job_downloading)
@@ -533,8 +559,8 @@ fun AudioPanel(
                     Text(stringResource(R.string.audio_add_from_file))
                 }
 
-                // ── 3. moje nahrávky ──
-                SectionLabel(Icons.Outlined.Mic, stringResource(R.string.audio_my_recordings))
+                } else {
+                // ── Moje nahrávky ──
                 Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (midiSupported && !recording) {
@@ -642,9 +668,19 @@ fun AudioPanel(
                         ),
                     )
                 }
+                if (recordings.isEmpty() && !recording) {
+                    Text(
+                        stringResource(R.string.audio_no_recordings),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+                }
                 Spacer(Modifier.size(4.dp))
             }
         }
+    }
     }
 
     confirmDeleteRecording?.let { f ->
@@ -656,7 +692,10 @@ fun AudioPanel(
                 val playing = MidiRenderer.playable(context, f)
                 if (player.file?.path == (playing ?: f).path) player.release()
                 f.delete()
-                if (MidiRenderer.isMidi(f)) MidiRenderer.delete(context, f)
+                if (MidiRenderer.isMidi(f)) {
+                    MidiRenderer.delete(context, f)
+                    com.daklok.crescendo.data.PieceMidi.notifyChanged()
+                }
                 version++
                 confirmDeleteRecording = null
             },
@@ -737,8 +776,14 @@ private fun TrackRow(
         if (active) scheme.secondaryContainer else scheme.surfaceContainerHighest,
         label = "trackRow",
     )
-    Surface(onClick = onClick, shape = RoundedCornerShape(18.dp), color = container, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(shape = RoundedCornerShape(18.dp), color = container, modifier = Modifier.fillMaxWidth()) {
+      Column {
+        Row(
+            Modifier
+                .clickable(onClick = onClick)
+                .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
                 Modifier
                     .size(40.dp)
@@ -772,7 +817,7 @@ private fun TrackRow(
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (subtitleError) scheme.error else scheme.onSurfaceVariant,
+                    color = if (subtitleError) scheme.error else if (active) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -794,6 +839,7 @@ private fun TrackRow(
                 }
             }
         }
+      }
     }
 }
 
@@ -818,73 +864,126 @@ private fun JobCard(text: String, progress: Float) {
     }
 }
 
-/**
- * Prehrávač hore v paneli: názov, prehrať / pauza, posuvník s časom, rýchlosť a slučka A–B –
- * platí pre čokoľvek, čo práve počúvaš (referenčnú aj vlastnú nahrávku).
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** Farby posuvníkov – dráha musí byť dobre vidieť aj na farebnom pozadí vybranej nahrávky. */
 @Composable
-private fun NowPlayingCard(player: AudioPlayer, title: String?) {
+private fun panelSliderColors(): androidx.compose.material3.SliderColors {
     val scheme = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(24.dp), color = scheme.primaryContainer, contentColor = scheme.onPrimaryContainer) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (title == null || player.file == null) {
-                Text(
-                    stringResource(R.string.audio_nothing_selected),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                )
-                return@Column
+    return androidx.compose.material3.SliderDefaults.colors(
+        thumbColor = scheme.primary,
+        activeTrackColor = scheme.primary,
+        inactiveTrackColor = scheme.onSecondaryContainer.copy(alpha = 0.22f),
+        activeTickColor = scheme.onPrimary,
+        inactiveTickColor = scheme.onSecondaryContainer.copy(alpha = 0.6f),
+    )
+}
+
+/**
+ * Prehrávač ako samostatná plávajúca karta nad panelom: názov, prehrať / pauza, posuvník s časom,
+ * rýchlosť a opakovanie úseku.
+ */
+@Composable
+private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
+    val scheme = MaterialTheme.colorScheme
+    val colors = panelSliderColors()
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = scheme.secondaryContainer,
+        contentColor = scheme.onSecondaryContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+    Column(
+        Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FilledIconButton(onClick = { player.toggle() }, modifier = Modifier.size(52.dp)) {
+                Icon(if (player.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null, Modifier.size(28.dp))
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilledIconButton(onClick = { player.toggle() }, modifier = Modifier.size(52.dp)) {
-                    Icon(if (player.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null, Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        formatClock(player.position) + " / " + formatClock(player.duration),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-            Slider(
-                value = if (player.duration > 0) (player.position.toFloat() / player.duration).coerceIn(0f, 1f) else 0f,
-                onValueChange = { v -> player.seek((v * player.duration).toLong()) },
-            )
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                listOf(0.5f, 0.75f, 1f).forEach { sp ->
-                    FilterChip(
-                        selected = player.speed == sp,
-                        onClick = { player.setPlaybackSpeed(sp) },
-                        label = { Text("${(sp * 100).toInt()} %") },
-                        leadingIcon = if (sp == 0.5f) ({ Icon(Icons.Outlined.Speed, null, Modifier.size(16.dp)) }) else null,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                }
-                FilterChip(
-                    selected = player.loopA != null,
-                    onClick = { player.loopA = if (player.loopA == null) player.position else null },
-                    label = { Text("A" + (player.loopA?.let { " " + formatClock(it) } ?: "")) },
-                    leadingIcon = { Icon(Icons.Outlined.Repeat, null, Modifier.size(16.dp)) },
-                    shape = RoundedCornerShape(12.dp),
-                )
-                FilterChip(
-                    selected = player.loopB != null,
-                    enabled = player.loopA != null,
-                    onClick = {
-                        player.loopB = if (player.loopB == null) player.position.takeIf { p -> p > (player.loopA ?: 0L) } else null
-                        player.loopA?.let { a -> if (player.loopB != null) player.seek(a) }
-                    },
-                    label = { Text("B" + (player.loopB?.let { " " + formatClock(it) } ?: "")) },
-                    shape = RoundedCornerShape(12.dp),
-                )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(source, style = MaterialTheme.typography.labelSmall, color = scheme.onSecondaryContainer.copy(alpha = 0.75f), maxLines = 1)
             }
         }
+        Slider(
+            value = if (player.duration > 0) (player.position.toFloat() / player.duration).coerceIn(0f, 1f) else 0f,
+            onValueChange = { v -> player.seek((v * player.duration).toLong()) },
+            colors = colors,
+        )
+        Row {
+            Text(formatClock(player.position), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            Text(formatClock(player.duration), style = MaterialTheme.typography.labelMedium)
+        }
+        HorizontalDivider(Modifier.padding(vertical = 6.dp), color = scheme.onSecondaryContainer.copy(alpha = 0.12f))
+        // rýchlosť – jeden posuvník (40–150 %), ťuk na percentá = späť na 100 %
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Speed, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.audio_speed), style = MaterialTheme.typography.labelLarge)
+            Slider(
+                value = player.speed,
+                onValueChange = { v -> player.setPlaybackSpeed((v * 20).roundToInt() / 20f) },
+                valueRange = 0.4f..1.5f,
+                colors = colors,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+            )
+            TextButton(onClick = { player.setPlaybackSpeed(1f) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("${(player.speed * 100).roundToInt()} %", fontWeight = FontWeight.Bold)
+            }
+        }
+        // opakovanie úseku – prepínač a jeden posuvník so začiatkom a koncom
+        val looping = player.loopA != null && player.loopB != null
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Repeat, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.audio_loop_section), style = MaterialTheme.typography.labelLarge)
+                if (looping) {
+                    Text(
+                        formatClock(player.loopA ?: 0) + " – " + formatClock(player.loopB ?: 0),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            androidx.compose.material3.Switch(
+                checked = looping,
+                onCheckedChange = { on ->
+                    if (on && player.duration > 0) {
+                        val a = player.position.coerceAtMost((player.duration - 1000).coerceAtLeast(0))
+                        player.loopA = a
+                        player.loopB = (a + 10_000).coerceAtMost(player.duration)
+                    } else {
+                        player.loopA = null
+                        player.loopB = null
+                    }
+                },
+            )
+        }
+        if (looping && player.duration > 0) {
+            val dur = player.duration.toFloat()
+            androidx.compose.material3.RangeSlider(
+                value = ((player.loopA ?: 0) / dur)..((player.loopB ?: player.duration) / dur),
+                onValueChange = { r ->
+                    val newA = (r.start * dur).toLong()
+                    val newB = (r.endInclusive * dur).toLong().coerceAtLeast(newA + 500)
+                    val aMoved = newA != player.loopA
+                    player.loopA = newA
+                    player.loopB = newB
+                    if (aMoved || player.position !in newA..newB) player.seek(newA)
+                },
+                colors = colors,
+            )
+            Text(
+                stringResource(R.string.audio_loop_hint2),
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSecondaryContainer.copy(alpha = 0.75f),
+            )
+        }
+    }
     }
 }
 

@@ -272,7 +272,7 @@ class CatalogRepository(private val context: Context) {
         try {
             val cached = midiFile(item) ?: return
             // MIDI ku skladbe – vizualizér (padajúce noty) je pripravený hneď po stiahnutí
-            val mid = pieceMidi.file(pieceId) ?: pieceMidi.setFrom(pieceId, cached, item.renderHint) ?: cached
+            val mid = pieceMidi.catalogFile(pieceId) ?: pieceMidi.setCatalog(pieceId, cached, item.renderHint) ?: cached
             if (audio.hasOfficial(pieceId) && !officialOutdated(pieceId, item)) return
             val sound = com.daklok.crescendo.data.midi.MidiRenderer.renderNow(
                 context,
