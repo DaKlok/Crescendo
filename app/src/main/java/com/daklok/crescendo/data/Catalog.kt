@@ -18,6 +18,17 @@ data class CatalogItem(
     val instrument: String,
     val difficulty: Int,
     val url: String,
+    /** Kód skladateľa (Mutopia, napr. „BachJS“) – na filter. */
+    val composerKey: String = "",
+    /** Skupina nástrojov: piano, keyboard, guitar, strings, winds, voice, ensemble, other. */
+    val category: String = "other",
+    /** Obdobie / štýl: baroque, classical, romantic, renaissance, folk, hymn, jazz, … */
+    val style: String = "other",
+    val opus: String = "",
+    /** MIDI nahrávka skladby (na vypočutie a referenčnú nahrávku) – len pri klávesových skladbách. */
+    val midi: String = "",
+    val featured: Boolean = false,
+    val license: String = "",
 ) {
     fun localizedTitle(): String =
         if (java.util.Locale.getDefault().language == "sk" && titleSk.isNotBlank()) titleSk else title
@@ -75,6 +86,13 @@ class CatalogRepository(private val context: Context) {
                 instrument = o.optString("instrument"),
                 difficulty = o.optInt("difficulty", 0),
                 url = o.optString("url"),
+                composerKey = o.optString("composerKey"),
+                category = o.optString("category", "other"),
+                style = o.optString("style", "other"),
+                opus = o.optString("opus"),
+                midi = o.optString("midi").takeIf { it.startsWith("https://") }.orEmpty(),
+                featured = o.optBoolean("featured", false),
+                license = o.optString("license"),
             ).takeIf { it.url.startsWith("https://") && it.title.isNotBlank() }
         }
     }
@@ -92,6 +110,47 @@ class CatalogRepository(private val context: Context) {
 
     private fun markDownloaded(id: String, pieceId: Long) {
         prefs.edit().putStringSet("downloaded", downloadedIds() + id).putLong("piece_$id", pieceId).apply()
+    }
+
+    /** Stiahne súbor z [url] do [target] (prepíše ho). */
+    private fun fetch(url: String, target: File) {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 60_000
+        try {
+            if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode}")
+            val tmp = File(target.path + ".part")
+            conn.inputStream.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** MIDI skladby (stiahne raz, potom z vyrovnávacej pamäte). */
+    suspend fun midiFile(item: CatalogItem): File? = withContext(Dispatchers.IO) {
+        if (item.midi.isBlank()) return@withContext null
+        val dir = File(context.cacheDir, "catalog_midi").apply { mkdirs() }
+        val f = File(dir, item.id.replace(Regex("[^A-Za-z0-9_.-]"), "_") + ".mid")
+        if (f.exists() && f.length() > 0) return@withContext f
+        runCatching { fetch(item.midi, f) }.getOrNull()
+        f.takeIf { it.exists() && it.length() > 0 }
+    }
+
+    /**
+     * K stiahnutej skladbe pridá referenčnú nahrávku vyrobenú z MIDI (beží na pozadí, môže chvíľu trvať).
+     * Existujúcu referenčnú nahrávku nikdy neprepíše.
+     */
+    suspend fun attachReference(item: CatalogItem, pieceId: Long, audio: PieceAudio) {
+        if (item.midi.isBlank() || audio.reference(pieceId) != null) return
+        val mid = midiFile(item) ?: return
+        val sound = com.daklok.crescendo.data.midi.MidiRenderer.renderNow(context, mid) ?: return
+        withContext(Dispatchers.IO) {
+            if (audio.reference(pieceId) == null) audio.setReference(pieceId, Uri.fromFile(sound), sound.extension)
+        }
     }
 
     /** Stiahne PDF a pridá ho do knižnice (do [folderId]). Vráti ID novej skladby. */

@@ -78,6 +78,22 @@ object MidiRenderer {
         }
     }
 
+    /**
+     * Vyrobí zvuk hneď (čaká na výsledok) – napr. ukážka v katalógu. Vráti súbor na prehranie alebo null.
+     */
+    suspend fun renderNow(context: Context, mid: File): File? = kotlinx.coroutines.withContext(Dispatchers.Default) {
+        playable(context, mid) ?: run {
+            val key = mid.path
+            _rendering.update { it + (key to 0f) }
+            try {
+                val ok = runCatching { lock.withLock { render(context.applicationContext, mid) } }.getOrDefault(false)
+                if (ok) playable(context, mid) else null
+            } finally {
+                _rendering.update { it - key }
+            }
+        }
+    }
+
     private fun render(context: Context, mid: File): Boolean {
         if (!mid.exists()) return false
         val events = MidiFile.read(mid)

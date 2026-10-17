@@ -138,9 +138,10 @@ object MidiFile {
                     else -> {
                         running = status
                         val type = status and 0xF0
+                        val drums = status and 0x0F == 9 // kanál 10 = bicie – klavírom nehráme
                         val d1 = u8()
                         val d2 = if (type == 0xC0 || type == 0xD0) 0 else u8()
-                        when (type) {
+                        if (!drums) when (type) {
                             0x90 -> raws.add(Raw(tick, order++, if (d2 == 0) 0x80 else 0x90, d1, d2))
                             0x80 -> raws.add(Raw(tick, order++, 0x80, d1, d2))
                             0xB0 -> raws.add(Raw(tick, order++, 0xB0, d1, d2))
