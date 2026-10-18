@@ -295,7 +295,7 @@ fun VisualizerPanel(
             if (f != null) {
                 clock = 0.0
                 // zvuk z MIDI aj ako referenčná nahrávka (na pozadí)
-                val label = "MIDI – " + (name?.substringBeforeLast('.') ?: "import")
+                val label = "MIDI: " + (name?.substringBeforeLast('.') ?: "import")
                 app.appScope.launch { runCatching { app.catalog.referenceFromPieceMidi(pieceId, label, app.pieceAudio) } }
             }
         }
@@ -804,7 +804,7 @@ private fun SourcePicker(
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    current?.let { sourceTitle(it) } ?: "—",
+                    current?.let { sourceTitle(it) } ?: "-",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,

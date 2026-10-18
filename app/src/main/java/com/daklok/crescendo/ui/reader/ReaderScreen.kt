@@ -215,7 +215,8 @@ private fun ReaderContent(
         val app = context.applicationContext as com.daklok.crescendo.CrescendoApp
         // skladba z katalógu s opraveným tempom / výberom partitúry – MIDI aj nahrávka sa obnovia na pozadí
         app.appScope.launch { runCatching { app.catalog.refreshOfficialIfOutdated(pid, app.pieceAudio) } }
-        prewarmVisualizer(app, pid)
+        // vizualizér je v Pro – bez neho sa noty vopred nepripravujú
+        if (app.pro.isPro.value) prewarmVisualizer(app, pid)
     }
 
     // Denník cvičenia: čas, keď je skladba otvorená a aplikácia v popredí (min. 30 s)
@@ -297,6 +298,8 @@ private fun ReaderContent(
             }
         }
     }
+    val proManager = (context.applicationContext as com.daklok.crescendo.CrescendoApp).pro
+    val isPro by proManager.isPro.collectAsStateWithLifecycle()
     /** Režim hrania: nič neruší – bez líšt, bez systémových panelov, ťuk do stredu len ukáže malé „Ukončiť“. */
     var immersive by remember { mutableStateOf(false) }
     var stageHint by remember { mutableStateOf(false) }
@@ -705,12 +708,24 @@ private fun ReaderContent(
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.audio_title)) },
                                     leadingIcon = { Icon(Icons.Outlined.Headphones, null) },
-                                    onClick = { more = false; audioOpen = true; metronomeOpen = false; tunerOpen = false; visOpen = false },
+                                    trailingIcon = { if (!isPro) com.daklok.crescendo.ui.pro.ProBadge() },
+                                    onClick = {
+                                        more = false
+                                        if (proManager.allow(com.daklok.crescendo.data.pro.ProFeature.AUDIO)) {
+                                            audioOpen = true; metronomeOpen = false; tunerOpen = false; visOpen = false
+                                        }
+                                    },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.visualizer)) },
                                     leadingIcon = { Icon(Icons.Outlined.Piano, null) },
-                                    onClick = { more = false; visOpen = true; audioOpen = false; metronomeOpen = false; tunerOpen = false },
+                                    trailingIcon = { if (!isPro) com.daklok.crescendo.ui.pro.ProBadge() },
+                                    onClick = {
+                                        more = false
+                                        if (proManager.allow(com.daklok.crescendo.data.pro.ProFeature.VISUALIZER)) {
+                                            visOpen = true; audioOpen = false; metronomeOpen = false; tunerOpen = false
+                                        }
+                                    },
                                 )
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.gesture_settings)) },
@@ -760,13 +775,23 @@ private fun ReaderContent(
                             icon = Icons.Outlined.Headphones,
                             contentDescription = stringResource(R.string.audio_title),
                             highlighted = audioOpen,
-                            onClick = { audioOpen = !audioOpen; metronomeOpen = false; tunerOpen = false; visOpen = false },
+                            pro = !isPro,
+                            onClick = {
+                                if (audioOpen || proManager.allow(com.daklok.crescendo.data.pro.ProFeature.AUDIO)) {
+                                    audioOpen = !audioOpen; metronomeOpen = false; tunerOpen = false; visOpen = false
+                                }
+                            },
                         )
                         TonalIconButton(
                             icon = Icons.Outlined.Piano,
                             contentDescription = stringResource(R.string.visualizer),
                             highlighted = visOpen,
-                            onClick = { visOpen = !visOpen; metronomeOpen = false; audioOpen = false; tunerOpen = false },
+                            pro = !isPro,
+                            onClick = {
+                                if (visOpen || proManager.allow(com.daklok.crescendo.data.pro.ProFeature.VISUALIZER)) {
+                                    visOpen = !visOpen; metronomeOpen = false; audioOpen = false; tunerOpen = false
+                                }
+                            },
                         )
                         Box {
                             var displayMenu by remember { mutableStateOf(false) }
@@ -824,7 +849,7 @@ private fun ReaderContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val first = pager.currentPage * perScreen + 1
-                    val label = if (spread && first + 1 <= pageCount) "$first–${first + 1}" else "$first"
+                    val label = if (spread && first + 1 <= pageCount) "$first-${first + 1}" else "$first"
                     // číslo strany v pilulke; pri zmene sa prevalí
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -1189,7 +1214,7 @@ private fun ReaderContent(
                 }
             }
             AnimatedVisibility(
-                visible = !visOpen && (visProgress != null || justReady),
+                visible = isPro && !visOpen && (visProgress != null || justReady),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()

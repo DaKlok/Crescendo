@@ -99,6 +99,7 @@ fun BackupSection(
     val haptic = rememberHaptic()
     val state by backup.state.collectAsStateWithLifecycle()
     val authClient = remember { Identity.getAuthorizationClient(context) }
+    val proActive by (context.applicationContext as CrescendoApp).pro.isPro.collectAsStateWithLifecycle()
 
     var remote by remember { mutableStateOf<RemoteBackup?>(null) }
     var confirmRestore by remember { mutableStateOf(false) }
@@ -292,18 +293,25 @@ fun BackupSection(
                         icon = Icons.Outlined.Wifi,
                         title = stringResource(R.string.auto_backup),
                         subtitle = stringResource(R.string.auto_backup_desc),
-                        checked = settings.autoBackup,
+                        checked = settings.autoBackup && proActive,
+                        pro = !proActive,
                         onChange = { on ->
-                            scope.launch { repo.update { it.copy(autoBackup = on) } }
-                            BackupScheduler.setEnabled(context, on)
+                            val pro = (context.applicationContext as CrescendoApp).pro
+                            if (!on || pro.allow(com.daklok.crescendo.data.pro.ProFeature.SYNC)) {
+                                scope.launch { repo.update { it.copy(autoBackup = on) } }
+                                BackupScheduler.setEnabled(context, on)
+                            }
                         },
                     )
                     SettingSwitchRow(
                         icon = Icons.Outlined.Sync,
                         title = stringResource(R.string.sync_title),
                         subtitle = stringResource(R.string.sync_desc),
-                        checked = settings.syncEnabled,
+                        checked = settings.syncEnabled && proActive,
+                        pro = !proActive,
                         onChange = { on ->
+                            val pro = (context.applicationContext as CrescendoApp).pro
+                            if (on && !pro.allow(com.daklok.crescendo.data.pro.ProFeature.SYNC)) return@SettingSwitchRow
                             scope.launch {
                                 repo.update { it.copy(syncEnabled = on) }
                                 if (on) {

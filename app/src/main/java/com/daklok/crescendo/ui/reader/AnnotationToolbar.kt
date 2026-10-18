@@ -1,5 +1,9 @@
 package com.daklok.crescendo.ui.reader
 
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Switch
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -106,6 +110,14 @@ fun AnnotationToolbar(
 ) {
     var confirmClear by remember { mutableStateOf(false) }
     val tool = controller.tool
+    // zadarmo len pero a guma, ostatné nástroje sú v Pro
+    val pro = (LocalContext.current.applicationContext as com.daklok.crescendo.CrescendoApp).pro
+    val isPro by pro.isPro.collectAsStateWithLifecycle()
+    fun free(t: InkTool) = t == InkTool.PEN || t == InkTool.ERASER
+    fun pick(t: InkTool) {
+        if (free(t) || pro.allow(com.daklok.crescendo.data.pro.ProFeature.ANNOTATIONS)) controller.selectTool(t)
+    }
+    LaunchedEffect(isPro) { if (!isPro && !free(controller.tool)) controller.selectTool(InkTool.PEN) }
     val vertical = position == ToolbarPosition.LEFT || position == ToolbarPosition.RIGHT
 
     Surface(
@@ -122,17 +134,17 @@ fun AnnotationToolbar(
                 SmallIconButton(Icons.Outlined.Close, stringResource(R.string.close_annotations), onClick = onClose)
             },
         ) {
-            ToolToggle(tool == InkTool.PEN, Icons.Outlined.Edit, stringResource(R.string.tool_pen)) { controller.selectTool(InkTool.PEN) }
-            ToolToggle(tool == InkTool.HIGHLIGHTER, Icons.Outlined.Highlight, stringResource(R.string.tool_highlighter)) {
-                controller.selectTool(InkTool.HIGHLIGHTER)
+            ToolToggle(tool == InkTool.PEN, Icons.Outlined.Edit, stringResource(R.string.tool_pen)) { pick(InkTool.PEN) }
+            ToolToggle(tool == InkTool.HIGHLIGHTER, Icons.Outlined.Highlight, stringResource(R.string.tool_highlighter), locked = !isPro) {
+                pick(InkTool.HIGHLIGHTER)
             }
-            ToolToggle(tool == InkTool.SHAPE, Icons.Outlined.Category, stringResource(R.string.tool_shapes)) { controller.selectTool(InkTool.SHAPE) }
-            ToolToggle(tool == InkTool.STAMP, Icons.Outlined.Approval, stringResource(R.string.tool_stamp)) { controller.selectTool(InkTool.STAMP) }
-            ToolToggle(tool == InkTool.LASSO, Icons.Outlined.HighlightAlt, stringResource(R.string.tool_lasso)) {
-                controller.selectTool(InkTool.LASSO)
+            ToolToggle(tool == InkTool.SHAPE, Icons.Outlined.Category, stringResource(R.string.tool_shapes), locked = !isPro) { pick(InkTool.SHAPE) }
+            ToolToggle(tool == InkTool.STAMP, Icons.Outlined.Approval, stringResource(R.string.tool_stamp), locked = !isPro) { pick(InkTool.STAMP) }
+            ToolToggle(tool == InkTool.LASSO, Icons.Outlined.HighlightAlt, stringResource(R.string.tool_lasso), locked = !isPro) {
+                pick(InkTool.LASSO)
             }
             ToolToggle(tool == InkTool.ERASER, Icons.Outlined.AutoFixNormal, stringResource(R.string.tool_eraser)) {
-                controller.selectTool(InkTool.ERASER)
+                pick(InkTool.ERASER)
             }
 
             ToolSection(tool == InkTool.PEN || tool == InkTool.HIGHLIGHTER || tool == InkTool.SHAPE, vertical) {
@@ -327,19 +339,26 @@ private fun ToolToggle(
     selected: Boolean,
     icon: ImageVector,
     description: String,
+    locked: Boolean = false,
     onClick: () -> Unit,
 ) {
-    FilledIconToggleButton(
-        checked = selected,
-        onCheckedChange = { onClick() },
-        modifier = Modifier.size(40.dp),
-        colors = IconButtonDefaults.filledIconToggleButtonColors(
-            containerColor = Color.Transparent,
-            checkedContainerColor = MaterialTheme.colorScheme.primary,
-            checkedContentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-    ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+    // hviezdička Pro je mimo tlačidla (tlačidlo orezáva obsah na kruh), ale v rámci 40 dp
+    Box(Modifier.size(40.dp)) {
+        FilledIconToggleButton(
+            checked = selected,
+            onCheckedChange = { onClick() },
+            modifier = Modifier.size(40.dp),
+            colors = IconButtonDefaults.filledIconToggleButtonColors(
+                containerColor = Color.Transparent,
+                checkedContainerColor = MaterialTheme.colorScheme.primary,
+                checkedContentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+        }
+        if (locked) {
+            com.daklok.crescendo.ui.pro.ProDot(Modifier.align(Alignment.TopEnd), size = 14.dp)
+        }
     }
 }
 

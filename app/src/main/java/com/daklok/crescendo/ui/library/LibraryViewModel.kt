@@ -308,7 +308,13 @@ class LibraryViewModel(
      * Importuje jeden alebo viac PDF do aktuálneho priečinka (alebo do knižnice, ak [intoRoot]).
      * [onFirstImported] sa zavolá s ID prvého úspešného importu.
      */
-    fun importPdfs(uris: List<Uri>, intoRoot: Boolean = false, onFirstImported: ((Long) -> Unit)? = null) {
+    fun importPdfs(uris0: List<Uri>, intoRoot: Boolean = false, onFirstImported: ((Long) -> Unit)? = null) {
+        if (uris0.isEmpty()) return
+        // verzia zadarmo: len toľko, koľko sa zmestí do limitu (zvyšok → okno Pro)
+        val pro = (app as CrescendoApp).pro
+        val slots = pro.slotsLeft()
+        if (slots < uris0.size) pro.allowNewPieces(uris0.size)
+        val uris = uris0.take(slots)
         if (uris.isEmpty()) return
         val target = if (intoRoot) null else state.value.currentFolder?.id
         viewModelScope.launch {
@@ -338,6 +344,7 @@ class LibraryViewModel(
 
     /** Import naskenovaného PDF (zo skenera) s vlastným názvom do aktuálneho priečinka. */
     fun importScan(uri: Uri, title: String, onImported: (Long) -> Unit = {}) {
+        if (!(app as CrescendoApp).pro.allowNewPieces()) return
         val target = state.value.currentFolder?.id
         viewModelScope.launch {
             importing.update { it + 1 }

@@ -4,7 +4,6 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material3.FilledTonalButton
@@ -140,7 +139,6 @@ fun LibraryScreen(
     onOpenSetlists: () -> Unit = {},
     onOpenPractice: () -> Unit = {},
     onOpenCatalog: () -> Unit = {},
-    onOpenShared: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val haptic = rememberHaptic()
@@ -180,10 +178,13 @@ fun LibraryScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         vm.importPdfs(uris)
     }
+    val pro = (LocalContext.current.applicationContext as com.daklok.crescendo.CrescendoApp).pro
+    val isPro by pro.isPro.collectAsStateWithLifecycle()
+    val pieceCount by pro.pieceCount.collectAsStateWithLifecycle()
     val launchImport = {
         haptic(HapticFeedbackType.LongPress)
-        // PDF alebo zdieľaná skladba z Crescenda (.crescendo = ZIP)
-        picker.launch(arrayOf("application/pdf", "application/zip", "application/octet-stream"))
+        // PDF alebo zdieľaná skladba z Crescenda (.crescendo = ZIP); bez Pro najviac 10 skladieb
+        if (pro.allowNewPieces()) picker.launch(arrayOf("application/pdf", "application/zip", "application/octet-stream"))
     }
 
     // doplnenie strán do existujúcej skladby (súbor alebo sken)
@@ -216,7 +217,7 @@ fun LibraryScreen(
         haptic(HapticFeedbackType.LongPress)
         // nový sken (nie doplnenie) – zrušíme prípadné nedokončené doplnenie
         pendingAppend = null
-        startScan()
+        if (pro.allowNewPieces()) startScan()
     }
 
     val current = state.currentFolder
@@ -304,6 +305,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.setlists)) },
                                             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) },
+                                            trailingIcon = { if (!isPro) com.daklok.crescendo.ui.pro.ProBadge() },
                                             onClick = { compactMenuOpen = false; onOpenSetlists() },
                                         )
                                         DropdownMenuItem(
@@ -316,11 +318,7 @@ fun LibraryScreen(
                                             leadingIcon = { Icon(Icons.Outlined.Insights, null) },
                                             onClick = { compactMenuOpen = false; onOpenPractice() },
                                         )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.sh_title)) },
-                                            leadingIcon = { Icon(Icons.Outlined.Groups, null) },
-                                            onClick = { compactMenuOpen = false; onOpenShared() },
-                                        )
+
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.new_folder)) },
                                             leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
@@ -383,13 +381,9 @@ fun LibraryScreen(
                                     icon = Icons.AutoMirrored.Outlined.QueueMusic,
                                     contentDescription = stringResource(R.string.setlists),
                                     onClick = onOpenSetlists,
+                                    pro = !isPro,
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.Groups,
-                                    contentDescription = stringResource(R.string.sh_title),
-                                    onClick = onOpenShared,
-                                )
+
                                 Spacer(Modifier.width(8.dp))
                                 TonalIconButton(
                                     icon = Icons.Outlined.CreateNewFolder,
@@ -452,6 +446,14 @@ fun LibraryScreen(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // verzia zadarmo: koľko skladieb ešte zostáva (ťuk → Pro)
+                        if (!isPro) {
+                            com.daklok.crescendo.ui.pro.LibraryQuota(
+                                count = pieceCount,
+                                limit = com.daklok.crescendo.data.pro.ProManager.FREE_PIECES,
+                                onClick = { pro.showPaywall(com.daklok.crescendo.data.pro.ProFeature.LIBRARY) },
+                            )
+                        }
                         // naskenovať noty fotoaparátom
                         SmallFloatingActionButton(
                             onClick = { launchScan() },
@@ -635,7 +637,8 @@ fun LibraryScreen(
             piece = piece,
             onSplit = { parts, keep ->
                 haptic(HapticFeedbackType.LongPress)
-                vm.splitPiece(piece, parts, keep)
+                // nové skladby z rozdelenia sa rátajú do limitu verzie zadarmo
+                if (pro.allowNewPieces(parts.size - if (keep) 0 else 1)) vm.splitPiece(piece, parts, keep)
                 splitting = null
             },
             onDismiss = { splitting = null },

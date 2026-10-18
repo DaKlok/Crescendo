@@ -48,6 +48,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG – v ladiacej verzii sa dá Pro zapnúť bez nákupu (na skúšanie)
+        buildConfig = true
     }
 }
 
@@ -96,4 +98,7 @@ dependencies {
     // Záloha na Google Drive
     implementation(libs.play.services.auth)
     implementation(libs.androidx.work.runtime.ktx)
+
+    // Crescendo Pro (nákup / predplatné cez Google Play)
+    implementation(libs.billing.ktx)
 }

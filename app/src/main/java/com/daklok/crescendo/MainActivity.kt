@@ -73,7 +73,6 @@ private sealed interface Route {
     data object Setlists : Route
     data object Practice : Route
     data object Catalog : Route
-    data object Shared : Route
 }
 
 class MainActivity : ComponentActivity() {
@@ -125,6 +124,7 @@ class MainActivity : ComponentActivity() {
             CrescendoTheme(mode = settings.themeMode, dynamicColor = settings.useDynamicColor) {
                 CompositionLocalProvider(LocalHapticsEnabled provides settings.haptics) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        com.daklok.crescendo.ui.pro.ProPaywallHost()
                         CrescendoNav(
                             app = app,
                             libraryVm = libraryVm,
@@ -227,7 +227,7 @@ private fun CrescendoNav(
                 (fadeIn(tween(260)) + slideInHorizontally(Motion.gentle()) { dir * it / 3 }) togetherWith
                     (fadeOut(tween(200)) + slideOutHorizontally(tween(260)) { -dir * it / 4 })
             } else if (targetState is Route.Reader ||
-                (targetState is Route.Setlists || targetState is Route.Practice || targetState is Route.Catalog || targetState is Route.Shared) &&
+                (targetState is Route.Setlists || targetState is Route.Practice || targetState is Route.Catalog) &&
                     initialState is Route.Library
             ) {
                 // otvorenie skladby: čítačka pružne „vyrastie“, knižnica ustúpi do pozadia
@@ -246,14 +246,9 @@ private fun CrescendoNav(
                 vm = libraryVm,
                 onOpenPiece = { route = Route.Reader(it) },
                 onOpenSettings = { showSettings = true },
-                onOpenSetlists = { route = Route.Setlists },
+                onOpenSetlists = { if (app.pro.allow(com.daklok.crescendo.data.pro.ProFeature.SETLISTS)) route = Route.Setlists },
                 onOpenPractice = { route = Route.Practice },
                 onOpenCatalog = { route = Route.Catalog },
-                onOpenShared = { route = Route.Shared },
-            )
-            Route.Shared -> com.daklok.crescendo.ui.share.SharedScreen(
-                onBack = { route = Route.Library },
-                onOpenPiece = { route = Route.Reader(it) },
             )
             Route.Catalog -> CatalogScreen(
                 onBack = { route = Route.Library },

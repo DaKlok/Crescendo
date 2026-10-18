@@ -73,7 +73,7 @@ object SyncState {
         val db = c.getDatabasePath("crescendo.db")
         // nastavenia, ktoré sú v zálohe (napr. vybraná referenčná nahrávka, skladby z katalógu)
         val prefsDir = File(c.applicationInfo.dataDir, "shared_prefs")
-        val prefs = listOf("annotation_tools", "metronome", "catalog", "reference_audio", "practice", "shared_links").map { File(prefsDir, "$it.xml") }
+        val prefs = listOf("annotation_tools", "metronome", "catalog", "reference_audio", "practice").map { File(prefsDir, "$it.xml") }
         val candidates = sequenceOf(db, File(db.path + "-wal")) + prefs.asSequence() +
             dirs.asSequence().flatMap { File(files, it).walkTopDown().filter { f -> f.isFile } }
         // prázdny -wal vytvorí SQLite už pri otvorení databázy (napr. po obnove) – to nie je zmena
@@ -102,7 +102,8 @@ object SyncManager {
 
     suspend fun enabled(app: CrescendoApp): Boolean {
         val s = app.settings.settings.first()
-        return s.syncEnabled && s.backupEmail.isNotBlank()
+        // synchronizácia je v Pro
+        return s.syncEnabled && s.backupEmail.isNotBlank() && app.pro.isPro.value
     }
 
     /** Je záloha na Drive novšia ako náš posledný zosúladený stav a nahralo ju iné zariadenie? */

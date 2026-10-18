@@ -2,6 +2,7 @@ package com.daklok.crescendo
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import com.daklok.crescendo.data.LanguageManager
 import android.content.Context
@@ -22,6 +23,8 @@ class CrescendoApp : Application() {
         super.onCreate()
         // pripomienka cvičenia (napr. po obnovení zálohy na novom zariadení)
         com.daklok.crescendo.data.PracticeReminder.ensure(this)
+        // overenie Pro v Google Play (offline ostane posledný známy stav)
+        appScope.launch { runCatching { pro.refresh() } }
     }
 
     val database by lazy { AppDatabase.create(this) }
@@ -34,8 +37,8 @@ class CrescendoApp : Application() {
     val pieceAudio by lazy { com.daklok.crescendo.data.PieceAudio(this) }
     val pieceMidi by lazy { com.daklok.crescendo.data.PieceMidi(this) }
     val catalog by lazy { com.daklok.crescendo.data.CatalogRepository(this) }
-    /** Spoločné noty (skupiny cez Google Drive). */
-    val shared by lazy { com.daklok.crescendo.data.share.SharedRepository(this) }
+    /** Crescendo Pro (nákup / predplatné cez Google Play). */
+    val pro by lazy { com.daklok.crescendo.data.pro.ProManager(this) }
     /** Pedále klavíra cez MIDI (USB / Bluetooth). */
     val midi by lazy { com.daklok.crescendo.data.MidiPedals(this) }
 

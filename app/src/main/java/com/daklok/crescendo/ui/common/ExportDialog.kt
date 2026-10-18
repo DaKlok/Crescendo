@@ -1,5 +1,6 @@
 package com.daklok.crescendo.ui.common
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -77,7 +78,9 @@ fun ExportPdfDialog(request: ExportRequest, onDismiss: () -> Unit, initialFormat
     val context = LocalContext.current
     val app = context.applicationContext as CrescendoApp
     var progress by remember { mutableStateOf<Float?>(null) }
-    var format by remember { mutableStateOf(initialFormat) }
+    // export do PDF je v Pro – bez neho je predvolený balík Crescenda
+    val isPro by app.pro.isPro.collectAsStateWithLifecycle()
+    var format by remember { mutableStateOf(if (initialFormat == ExportFormat.PDF && !app.pro.isPro.value) ExportFormat.PACKAGE else initialFormat) }
 
     fun finish(ok: Boolean, okMsg: Int) {
         Toast.makeText(app, if (ok) okMsg else R.string.export_failed, Toast.LENGTH_SHORT).show()
@@ -163,10 +166,18 @@ fun ExportPdfDialog(request: ExportRequest, onDismiss: () -> Unit, initialFormat
                         ExportFormat.entries.forEachIndexed { i, f ->
                             SegmentedButton(
                                 selected = format == f,
-                                onClick = { format = f },
+                                onClick = {
+                                    if (f != ExportFormat.PDF || app.pro.allow(com.daklok.crescendo.data.pro.ProFeature.EXPORT_PDF)) format = f
+                                },
                                 shape = SegmentedButtonDefaults.itemShape(i, ExportFormat.entries.size),
                             ) {
-                                Text(stringResource(if (f == ExportFormat.PDF) R.string.export_fmt_pdf else R.string.export_fmt_pkg))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(stringResource(if (f == ExportFormat.PDF) R.string.export_fmt_pdf else R.string.export_fmt_pkg))
+                                    if (f == ExportFormat.PDF && !isPro) {
+                                        Spacer(Modifier.width(6.dp))
+                                        com.daklok.crescendo.ui.pro.ProBadge()
+                                    }
+                                }
                             }
                         }
                     }

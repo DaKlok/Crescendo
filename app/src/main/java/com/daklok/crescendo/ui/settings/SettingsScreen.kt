@@ -1,5 +1,6 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Crop
 import androidx.compose.material.icons.outlined.VerticalSplit
@@ -468,6 +469,7 @@ private fun SettingsHome(settings: AppSettings, onOpen: (SettingsPage) -> Unit) 
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        ProCard()
         SettingsCard {
             CategoryRow(SettingsPage.APPEARANCE, stringResource(settings.themeMode.labelRes) + dot + stringResource(language.labelRes), onOpen)
             Divider()
@@ -496,6 +498,74 @@ private fun SettingsHome(settings: AppSettings, onOpen: (SettingsPage) -> Unit) 
             )
             Divider()
             CategoryRow(SettingsPage.ABOUT, stringResource(R.string.version_line, version), onOpen)
+        }
+    }
+}
+
+/** Karta Crescendo Pro hore v nastaveniach – výrazná pozvánka (zadarmo) alebo stav (Pro). */
+@Composable
+private fun ProCard() {
+    val app = LocalContext.current.applicationContext as com.daklok.crescendo.CrescendoApp
+    val isPro by app.pro.isPro.collectAsStateWithLifecycle()
+    val white = androidx.compose.ui.graphics.Color.White
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .then(
+                if (isPro) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                else Modifier.background(com.daklok.crescendo.ui.pro.proBrush()),
+            )
+            .clickable { app.pro.showPaywall() }
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .background(
+                        if (isPro) MaterialTheme.colorScheme.primaryContainer else white.copy(alpha = 0.22f),
+                        RoundedCornerShape(16.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Star, null, Modifier.size(26.dp),
+                    tint = if (isPro) MaterialTheme.colorScheme.onPrimaryContainer else white,
+                )
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Crescendo Pro",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = if (isPro) MaterialTheme.colorScheme.onSurface else white,
+                    )
+                    if (isPro) {
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                        com.daklok.crescendo.ui.pro.ProBadge()
+                    }
+                }
+                Text(
+                    stringResource(if (isPro) R.string.pro_active else R.string.pro_settings_pitch),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isPro) MaterialTheme.colorScheme.onSurfaceVariant else white.copy(alpha = 0.9f),
+                )
+            }
+            if (!isPro) {
+                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.Surface(shape = RoundedCornerShape(50), color = white) {
+                    Text(
+                        stringResource(R.string.pro_unlock),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+            }
         }
     }
 }

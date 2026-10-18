@@ -1,5 +1,11 @@
 package com.daklok.crescendo.ui.stats
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.animateContentSize
 import com.daklok.crescendo.data.PracticeReminder
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TimeInput
@@ -193,11 +199,11 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
     var selectedEpoch by rememberSaveable { mutableLongStateOf(today.toEpochDay()) }
     val selectedDay = LocalDate.ofEpochDay(selectedEpoch)
     var editGoal by remember { mutableStateOf(false) }
-    var editSession by remember { mutableStateOf<PracticeSessionEntity?>(null) }
-    var addSession by remember { mutableStateOf(false) }
     var detailPiece by remember { mutableStateOf<Long?>(null) }
     var reminderOn by remember { mutableStateOf(PracticeReminder.enabled(context)) }
     var reminderOpen by remember { mutableStateOf(false) }
+    // detail dňa: otvorí sa po ťuknutí na deň v grafe alebo v mriežke
+    var dayOpen by remember { mutableStateOf(false) }
 
     val compact = isCompactWidth()
     Scaffold(
@@ -258,12 +264,6 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                             textAlign = TextAlign.Center,
                             modifier = Modifier.widthIn(max = 480.dp),
                         )
-                        Spacer(Modifier.height(20.dp))
-                        FilledTonalButton(onClick = { addSession = true }, shape = RoundedCornerShape(18.dp)) {
-                            Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.practice_add))
-                        }
                     }
                 } else {
                     // ── dnes + čísla ──
@@ -310,19 +310,12 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                         firstDow = firstDow,
                         goalSec = goalSec,
                         selected = selectedDay,
-                        onSelect = { selectedEpoch = it.toEpochDay() },
+                        onSelect = { selectedEpoch = it.toEpochDay(); dayOpen = true },
                     )
 
-                    // ── záznamy vybraného dňa ──
-                    DayCard(
-                        day = selectedDay,
-                        today = today,
-                        sessions = byDay[selectedDay].orEmpty().sortedBy { it.startedAt },
-                        pieceById = pieceById,
-                        onEdit = { editSession = it },
-                        onAdd = { addSession = true },
-                        onOpenPiece = { detailPiece = it },
-                    )
+                    // ── odznaky ──
+                    val badgeStats = remember(sessions, goalMin, bestStreak) { badgeStats(sessions, goalMin, bestStreak, zone) }
+                    BadgesSection(badgeStats)
 
                     // ── pravidelnosť ──
                     Heatmap(
@@ -332,7 +325,7 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                         goalSec = goalSec,
                         weeks = if (compact) 15 else 26,
                         selected = selectedDay,
-                        onSelect = { selectedEpoch = it.toEpochDay() },
+                        onSelect = { selectedEpoch = it.toEpochDay(); dayOpen = true },
                     )
 
                     // ── najviac cvičené ──
@@ -404,44 +397,18 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
             onDismiss = { editGoal = false },
         )
     }
-    editSession?.let { s ->
-        SessionDialog(
-            title = pieceById[s.pieceId]?.title ?: "",
-            pieces = null,
-            initialMinutes = (s.durationSec / 60).coerceAtLeast(1),
-            initialNote = s.note,
-            onSave = { _, minutes, note ->
-                scope.launch(Dispatchers.IO) { app.practice.update(s.copy(durationSec = minutes * 60, note = note)) }
-                editSession = null
-            },
-            onDelete = {
-                scope.launch(Dispatchers.IO) { app.practice.delete(s.id) }
-                editSession = null
-            },
-            onDismiss = { editSession = null },
-        )
-    }
-    if (addSession) {
-        val day = if (sessions.isEmpty()) today else selectedDay
-        SessionDialog(
-            title = stringResource(R.string.practice_add_for, day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))),
-            pieces = pieces,
-            initialMinutes = 20,
-            initialNote = "",
-            onSave = { pieceId, minutes, note ->
-                if (pieceId != null) {
-                    // dnes = teraz (koniec cvičenia), iný deň = poludnie
-                    val start = if (day == today) System.currentTimeMillis() - minutes * 60_000L
-                    else day.atTime(LocalTime.NOON).atZone(zone).toInstant().toEpochMilli()
-                    scope.launch(Dispatchers.IO) {
-                        app.practice.insert(PracticeSessionEntity(pieceId = pieceId, startedAt = start, durationSec = minutes * 60, note = note))
-                    }
-                }
-                addSession = false
-            },
-            onDelete = null,
-            onDismiss = { addSession = false },
-        )
+    if (dayOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { dayOpen = false }) {
+            Box(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 24.dp).navigationBarsPadding()) {
+                DayCard(
+                    day = selectedDay,
+                    today = today,
+                    sessions = byDay[selectedDay].orEmpty().sortedBy { it.startedAt },
+                    pieceById = pieceById,
+                    onOpenPiece = { dayOpen = false; detailPiece = it },
+                )
+            }
+        }
     }
     if (reminderOpen) {
         ReminderDialog(
@@ -563,7 +530,7 @@ private fun PeriodChart(
         days.first().format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.titlecase(locale) }
     } else {
         val f = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-        days.first().format(f) + " – " + days.last().format(f)
+        days.first().format(f) + " - " + days.last().format(f)
     }
     val periodSec = days.sumOf { perDay[it] ?: 0L }
     val activeDays = days.count { (perDay[it] ?: 0L) > 0L }
@@ -704,8 +671,6 @@ private fun DayCard(
     today: LocalDate,
     sessions: List<PracticeSessionEntity>,
     pieceById: Map<Long, PieceEntity>,
-    onEdit: (PracticeSessionEntity) -> Unit,
-    onAdd: () -> Unit,
     onOpenPiece: (Long) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -729,11 +694,6 @@ private fun DayCard(
                         color = scheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onAdd) {
-                    Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.practice_add))
-                }
             }
             if (sessions.isEmpty()) {
                 Text(
@@ -743,58 +703,130 @@ private fun DayCard(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            sessions.forEach { s ->
-                val piece = pieceById[s.pieceId]
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onEdit(s) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
+            // jedna skladba = jeden riadok (súčet času, počet sedení); podrobnosti po rozbalení
+            val groups = remember(sessions) {
+                sessions.groupBy { it.pieceId }.entries
+                    .map { (id, l) -> Triple(id, l.sortedBy { it.startedAt }, l.sumOf { it.durationSec.toLong() }) }
+                    .sortedByDescending { it.third }
+            }
+            val dayTotal = groups.sumOf { it.third }.coerceAtLeast(1L)
+            var showAll by remember(day) { mutableStateOf(false) }
+            var expanded by remember(day) { mutableStateOf<Long?>(null) }
+            val visible = if (showAll) groups else groups.take(DAY_PREVIEW)
+            visible.forEach { (pieceId, list, total) ->
+                val piece = pieceById[pieceId]
+                val open = expanded == pieceId
+                Column(Modifier.animateContentSize()) {
+                    Row(
                         Modifier
-                            .size(40.dp)
-                            .background(scheme.secondaryContainer, CircleShape)
-                            .clickable(enabled = piece != null) { onOpenPiece(s.pieceId) },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Outlined.MusicNote, null, Modifier.size(20.dp), tint = scheme.onSecondaryContainer) }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            piece?.title ?: stringResource(R.string.practice_deleted_piece),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalTime().format(timeFormat) + " · " + formatDuration(s.durationSec.toLong()),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurfaceVariant,
-                        )
-                        if (s.note.isNotBlank()) {
+                            .fillMaxWidth()
+                            .clickable { expanded = if (open) null else pieceId }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .background(scheme.secondaryContainer, CircleShape)
+                                .clickable(enabled = piece != null) { onOpenPiece(pieceId) },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Outlined.MusicNote, null, Modifier.size(20.dp), tint = scheme.onSecondaryContainer) }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                s.note,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontStyle = FontStyle.Italic,
-                                maxLines = 3,
+                                piece?.title ?: stringResource(R.string.practice_deleted_piece),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 2.dp),
                             )
+                            // podiel na dnešnom čase
+                            Box(
+                                Modifier
+                                    .padding(top = 6.dp)
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(scheme.surfaceVariant),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth((total.toFloat() / dayTotal).coerceIn(0.03f, 1f))
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(50))
+                                        .background(scheme.primary),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(formatDuration(total), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            if (list.size > 1 || list.any { it.note.isNotBlank() }) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (list.any { it.note.isNotBlank() }) {
+                                        Icon(Icons.AutoMirrored.Outlined.Notes, null, Modifier.size(14.dp), tint = scheme.primary)
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    if (list.size > 1) {
+                                        Text("${list.size}×", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                        Icon(
+                            if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            null,
+                            Modifier.padding(start = 4.dp).size(20.dp),
+                            tint = scheme.onSurfaceVariant,
+                        )
+                    }
+                    if (open) {
+                        // jednotlivé sedenia: čas, dĺžka (len na čítanie – čas meria aplikácia sama)
+                        list.forEach { s ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 68.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalTime().format(timeFormat) + " · " + formatDuration(s.durationSec.toLong()),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = scheme.onSurfaceVariant,
+                                    )
+                                    if (s.note.isNotBlank()) {
+                                        Text(
+                                            s.note,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontStyle = FontStyle.Italic,
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                    Icon(
-                        Icons.AutoMirrored.Outlined.Notes,
-                        stringResource(R.string.practice_edit),
-                        Modifier.size(18.dp),
-                        tint = if (s.note.isNotBlank()) scheme.primary else scheme.onSurfaceVariant.copy(alpha = 0.6f),
+                }
+            }
+            if (groups.size > DAY_PREVIEW) {
+                TextButton(
+                    onClick = { showAll = !showAll },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        if (showAll) stringResource(R.string.practice_show_less)
+                        else stringResource(R.string.practice_show_all, groups.size),
                     )
                 }
             }
         }
     }
 }
+
+/** Koľko skladieb sa v karte dňa ukáže, kým sa nerozbalí celý zoznam. */
+private const val DAY_PREVIEW = 4
 
 /** Pravidelnosť: mriežka posledných týždňov (stĺpec = týždeň), farba podľa splnenia denného cieľa. */
 @Composable
@@ -1017,124 +1049,6 @@ private fun GoalDialog(current: Int, onSave: (Int) -> Unit, onDismiss: () -> Uni
     )
 }
 
-/**
- * Úprava záznamu (dĺžka, poznámka, zmazanie) alebo ručné pridanie ([pieces] != null – treba vybrať skladbu).
- */
-@Composable
-private fun SessionDialog(
-    title: String,
-    pieces: List<PieceEntity>?,
-    initialMinutes: Int,
-    initialNote: String,
-    onSave: (pieceId: Long?, minutes: Int, note: String) -> Unit,
-    onDelete: (() -> Unit)?,
-    onDismiss: () -> Unit,
-) {
-    var minutesText by remember { mutableStateOf(initialMinutes.toString()) }
-    var note by remember { mutableStateOf(initialNote) }
-    var query by remember { mutableStateOf("") }
-    var pieceId by remember { mutableStateOf<Long?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    val minutes = minutesText.toIntOrNull()?.takeIf { it in 1..600 }
-    val canSave = minutes != null && (pieces == null || pieceId != null)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (pieces != null) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        singleLine = true,
-                        leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                        placeholder = { Text(stringResource(R.string.practice_pick_piece)) },
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    val filtered = remember(pieces, query) {
-                        pieces.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) || it.composer.contains(query, ignoreCase = true) }
-                            .sortedByDescending { it.lastOpenedAt }
-                    }
-                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                        LazyColumn(Modifier.heightIn(max = 220.dp)) {
-                            items(filtered, key = { it.id }) { p ->
-                                val sel = p.id == pieceId
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .background(if (sel) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)
-                                        .clickable { pieceId = p.id }
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(Icons.Outlined.MusicNote, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(
-                                        p.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = minutesText,
-                    onValueChange = { t -> minutesText = t.filter { it.isDigit() }.take(3) },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.practice_minutes)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = minutes == null,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it.take(500) },
-                    label = { Text(stringResource(R.string.practice_note)) },
-                    placeholder = { Text(stringResource(R.string.practice_note_hint)) },
-                    minLines = 2,
-                    maxLines = 5,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (onDelete != null) {
-                    TextButton(
-                        onClick = { confirmDelete = true },
-                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) {
-                        Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.practice_delete))
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(pieceId, minutes ?: 0, note.trim()) }, enabled = canSave) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
-    if (confirmDelete && onDelete != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Delete, null) },
-            title = { Text(stringResource(R.string.practice_delete_title)) },
-            text = { Text(stringResource(R.string.practice_delete_text)) },
-            confirmButton = { TextButton(onClick = onDelete) { Text(stringResource(R.string.delete)) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
-        )
-    }
-}
-
-/** Detail skladby: koľko, ako často, posledných 8 týždňov a poznámky. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PieceSheet(
     piece: PieceEntity,
@@ -1178,7 +1092,7 @@ private fun PieceSheet(
                 StatCard(Icons.Outlined.CalendarMonth, stringResource(R.string.practice_sessions), sessions.size.toString(), Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard(Icons.Outlined.Today, stringResource(R.string.practice_last), last?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(dateFormat) } ?: "—", Modifier.weight(1f))
+                StatCard(Icons.Outlined.Today, stringResource(R.string.practice_last), last?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(dateFormat) } ?: "-", Modifier.weight(1f))
                 StatCard(Icons.Outlined.Schedule, stringResource(R.string.practice_avg), formatDuration(avg), Modifier.weight(1f))
             }
             Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh)) {

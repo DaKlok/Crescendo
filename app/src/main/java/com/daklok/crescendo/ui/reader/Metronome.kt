@@ -273,7 +273,7 @@ fun MetronomePanel(
                             engine.beats = n
                             onChanged()
                         },
-                        label = { Text(if (n == 1) "–" else "$n/4") },
+                        label = { Text(if (n == 1) "-" else "$n/4") },
                         shape = RoundedCornerShape(12.dp),
                     )
                 }

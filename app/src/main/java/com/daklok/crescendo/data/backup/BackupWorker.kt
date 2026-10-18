@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit
 class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val manager = applicationContext.backupManager
+        // automatická záloha je v Pro (ručná ostáva zadarmo)
+        if (!(applicationContext as com.daklok.crescendo.CrescendoApp).pro.isPro.value) return Result.success()
         // na pozadí sa nedá zobraziť prihlásenie – ak treba, záloha sa jednoducho preskočí
         val token = manager.silentToken() ?: return Result.success()
         // pri synchronizácii neprepíšeme novší stav z iného zariadenia – rozhodne používateľ

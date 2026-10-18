@@ -965,7 +965,7 @@ private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
                 Text(stringResource(R.string.audio_loop_section), style = MaterialTheme.typography.labelLarge)
                 if (looping) {
                     Text(
-                        formatClock(player.loopA ?: 0) + " – " + formatClock(player.loopB ?: 0),
+                        formatClock(player.loopA ?: 0) + " - " + formatClock(player.loopB ?: 0),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }

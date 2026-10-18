@@ -228,7 +228,7 @@ fun TunerContent(modifier: Modifier = Modifier) {
         }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (midi.isNaN()) "–" else NOTE_NAMES[((nearest % 12) + 12) % 12],
+                if (midi.isNaN()) "-" else NOTE_NAMES[((nearest % 12) + 12) % 12],
                 style = MaterialTheme.typography.displayLarge,
                 fontWeight = FontWeight.Bold,
                 color = color,
@@ -443,7 +443,7 @@ private fun ChordContent(modifier: Modifier = Modifier) {
         }
         val c = chord
         Text(
-            c?.let { chordSymbol(it) } ?: "–",
+            c?.let { chordSymbol(it) } ?: "-",
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
             color = color,

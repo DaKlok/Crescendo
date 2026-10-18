@@ -1,5 +1,6 @@
 package com.daklok.crescendo.ui.common
 
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -153,6 +154,8 @@ fun TonalIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     highlighted: Boolean = false,
+    /** Funkcia je v Pro – v rohu sa ukáže hviezdička. */
+    pro: Boolean = false,
 ) {
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
@@ -168,22 +171,31 @@ fun TonalIconButton(
         animationSpec = tween(220),
         label = "tonalContent",
     )
-    FilledIconButton(
-        onClick = {
-            haptic(HapticFeedbackType.TextHandleMove)
-            onClick()
-        },
-        enabled = enabled,
-        interactionSource = interaction,
-        modifier = modifier
-            .size(40.dp)
-            .pressScale(interaction, 0.88f),
-        colors = IconButtonDefaults.filledIconButtonColors(
-            containerColor = container,
-            contentColor = content,
-        ),
-    ) {
-        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
+    Box(modifier) {
+        FilledIconButton(
+            onClick = {
+                haptic(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+            enabled = enabled,
+            interactionSource = interaction,
+            modifier = Modifier
+                .size(40.dp)
+                .pressScale(interaction, 0.88f),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = container,
+                contentColor = content,
+            ),
+        ) {
+            Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
+        }
+        if (pro) {
+            com.daklok.crescendo.ui.pro.ProDot(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 3.dp, y = (-3).dp),
+            )
+        }
     }
 }
 
@@ -256,6 +268,8 @@ fun SettingSwitchRow(
     checked: Boolean,
     onChange: (Boolean) -> Unit,
     enabled: Boolean = true,
+    /** Nastavenie je v Pro – pri názve sa ukáže štítok PRO. */
+    pro: Boolean = false,
 ) {
     val haptic = rememberHaptic()
     Row(
@@ -272,7 +286,13 @@ fun SettingSwitchRow(
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f, fill = false))
+                if (pro) {
+                    Spacer(Modifier.width(8.dp))
+                    com.daklok.crescendo.ui.pro.ProBadge()
+                }
+            }
             if (subtitle != null) {
                 Text(
                     subtitle,

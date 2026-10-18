@@ -15,6 +15,10 @@ interface PieceDao {
     @Query("SELECT * FROM pieces WHERE lastOpenedAt > 0 ORDER BY lastOpenedAt DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<PieceEntity>
 
+    /** Počet skladieb (limit verzie zadarmo). */
+    @Query("SELECT COUNT(*) FROM pieces")
+    fun observeCount(): Flow<Int>
+
     @Query("SELECT * FROM pieces WHERE id = :id")
     suspend fun getById(id: Long): PieceEntity?
 

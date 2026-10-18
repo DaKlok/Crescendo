@@ -291,6 +291,8 @@ fun CatalogScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit) {
             onOpenPiece(newId)
             return
         }
+        // verzia zadarmo: najviac 10 skladieb v knižnici
+        if (!app.pro.allowNewPieces()) return
         haptic(HapticFeedbackType.LongPress)
         states[item.id] = DownloadState.LOADING
         dlProgress[item.id] = 0f

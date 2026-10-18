@@ -11,6 +11,7 @@ datastore = "1.1.7"
 camerax = "1.4.2"
 mlkitFace = "16.1.7"
 playServicesAuth = "21.3.0"
+billing = "7.1.1"
 work = "2.10.1"
 docScanner = "16.0.0"
 pdfbox = "2.0.27.0"
@@ -44,6 +45,7 @@ pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbo
 mlkit-document-scanner = { module = "com.google.android.gms:play-services-mlkit-document-scanner", version.ref = "docScanner" }
 
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
+billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 [plugins]
