@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [PieceEntity::class, FolderEntity::class, SetlistEntity::class, SetlistItemEntity::class, PracticeSessionEntity::class],
-    version = 5, exportSchema = true)
+    version = 6, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pieceDao(): PieceDao
     abstract fun folderDao(): FolderDao
@@ -77,9 +77,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 -> v6: poznámka k cvičeniu v denníku. */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `practice_sessions` ADD COLUMN `note` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "crescendo.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

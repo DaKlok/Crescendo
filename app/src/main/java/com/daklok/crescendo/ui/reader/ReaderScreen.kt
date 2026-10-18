@@ -200,35 +200,45 @@ private fun ReaderContent(
         if (metronomePieceId != null) MetronomePrefs.load(context, metronomePieceId, metronome)
     }
     DisposableEffect(Unit) { onDispose { metronome.stop() } }
+    // vizualizér: noty z MIDI sa pripravia vopred, aby sa panel otvoril hneď
+    LaunchedEffect(metronomePieceId) {
+        val pid = metronomePieceId ?: return@LaunchedEffect
+        val app = context.applicationContext as com.daklok.crescendo.CrescendoApp
+        // skladba z katalógu s opraveným tempom / výberom partitúry – MIDI aj nahrávka sa obnovia na pozadí
+        app.appScope.launch { runCatching { app.catalog.refreshOfficialIfOutdated(pid, app.pieceAudio) } }
+        prewarmVisualizer(app, pid)
+    }
 
     // Denník cvičenia: čas, keď je skladba otvorená a aplikácia v popredí (min. 30 s)
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, metronomePieceId) {
         val pid = metronomePieceId ?: return@DisposableEffect onDispose { }
         val app = context.applicationContext as com.daklok.crescendo.CrescendoApp
-        val startedAt = System.currentTimeMillis()
-        var resumedAt = if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startedAt else 0L
-        var total = 0L
+        // čas cvičenia – ukladá sa priebežne, takže sa nestratí ani pri zabití aplikácie
+        val tracker = com.daklok.crescendo.data.PracticeTracker(app.practice, app.appScope, pid)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) tracker.resume()
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> resumedAt = System.currentTimeMillis()
-                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> if (resumedAt > 0) {
-                    total += System.currentTimeMillis() - resumedAt
-                    resumedAt = 0L
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> tracker.resume()
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    tracker.pause()
+                    tracker.flush()
                 }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            if (resumedAt > 0) total += System.currentTimeMillis() - resumedAt
-            val sec = (total / 1000).toInt()
-            if (sec >= 30) {
-                app.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    app.practice.insert(com.daklok.crescendo.data.PracticeSessionEntity(pieceId = pid, startedAt = startedAt, durationSec = sec))
-                }
+        val ticker = app.appScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                tracker.flush()
             }
+        }
+        onDispose {
+            ticker.cancel()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            tracker.pause()
+            tracker.flush()
         }
     }
     val ui by vm.state.collectAsStateWithLifecycle()

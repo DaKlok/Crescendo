@@ -54,7 +54,10 @@ class BackupManager(private val app: CrescendoApp) {
     private val folders = listOf("pdfs", "thumbs", "annotations", "datastore", "audio", "recordings", "piece_midi")
 
     /** SharedPreferences, ktoré patria do zálohy (nastavenia nástrojov editora, jazyk, tempá metronómu). */
-    private val prefsNames = listOf("annotation_tools", "crescendo_language", "metronome")
+    private val prefsNames = listOf("annotation_tools", "crescendo_language", "metronome", "catalog", "reference_audio", "practice")
+
+    /** Patria k dátam skladieb (ID skladieb) – ak ich stará záloha nemá, nesmú ostať tie z tohto zariadenia. */
+    private val piecePrefs = setOf("catalog", "reference_audio")
     private val dbName = "crescendo.db"
 
     val authorizationRequest: AuthorizationRequest =
@@ -252,8 +255,10 @@ class BackupManager(private val app: CrescendoApp) {
     }
 
     private fun extractArchive(zip: File) {
-        // vyčistíme súčasné dáta
+        // vyčistíme súčasné dáta – aj vyrobené zvuky z MIDI (sú pomenované podľa ID skladby, ktoré
+        // po obnove môže patriť inej skladbe; vyrobia sa znova)
         folders.forEach { File(app.filesDir, it).deleteRecursively() }
+        File(app.filesDir, "midi_render").deleteRecursively()
         val dbFile = app.getDatabasePath(dbName)
         listOf("", "-wal", "-shm", "-journal").forEach { File(dbFile.path + it).delete() }
 
@@ -304,7 +309,10 @@ class BackupManager(private val app: CrescendoApp) {
 
     private fun importPrefs(root: JSONObject) {
         prefsNames.forEach { name ->
-            val obj = root.optJSONObject(name) ?: return@forEach
+            val obj = root.optJSONObject(name) ?: run {
+                if (name in piecePrefs) app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+                return@forEach
+            }
             val ed = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear()
             for (key in obj.keys()) {
                 val e = obj.getJSONObject(key)

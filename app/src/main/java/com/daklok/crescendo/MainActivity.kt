@@ -223,7 +223,7 @@ private fun CrescendoNav(
                 onBack = { route = Route.Library },
                 onOpenPiece = { route = Route.Reader(it) },
             )
-            Route.Practice -> PracticeScreen(onBack = { route = Route.Library })
+            Route.Practice -> PracticeScreen(onBack = { route = Route.Library }, onOpenPiece = { route = Route.Reader(it) })
             Route.Setlists -> {
                 val vm: SetlistViewModel = viewModel(
                     key = "setlists",

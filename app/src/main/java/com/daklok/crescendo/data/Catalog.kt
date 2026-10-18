@@ -32,10 +32,21 @@ data class CatalogItem(
     val license: String = "",
     /** Dátum pridania do Mutopie (RRRR-MM-DD) – na zoradenie „najnovšie“. */
     val added: String = "",
+    /**
+     * Skladby, ktoré má Mutopia len ako ZIP s viacerými PDF / MIDI (partitúra + party, jednotlivé časti):
+     * ktoré súbory použiť (názvy bez prípony, v poradí – viac = spoja sa za sebou).
+     */
+    val parts: List<String> = emptyList(),
+    /**
+     * Správne tempo (štvrťové noty za minútu) pre MIDI bez tempa – Mutopia ho pri niektorých skladbách
+     * nemá a hrali by pomaly (4 = 60). Pri viacerých častiach jedno číslo pre každú časť.
+     */
+    val tempo: List<Int> = emptyList(),
 ) {
-    /** Organová skladba – ukážka a nahrávka znejú ako organ. */
+    /** Organová skladba (len organ / klávesy) – ukážka a nahrávka znejú ako organ. Spev s organom ostane spevom. */
     val isOrgan: Boolean
-        get() = instrument.contains("organ", ignoreCase = true) && !instrument.contains("piano", ignoreCase = true)
+        get() = category == "keyboard" && instrument.contains("organ", ignoreCase = true) &&
+            !instrument.contains("piano", ignoreCase = true)
 
     /** Podľa čoho vybrať nástroj, ak MIDI nemá nastavené nástroje (organ, guitar, strings, winds, voice…). */
     val renderHint: String
@@ -58,7 +69,10 @@ class CatalogRepository(private val context: Context) {
         const val PREVIEW_SECONDS = 60.0
 
         /** Verzia výroby oficiálnych nahrávok (2 = organ ako organ, bez zdvojení o oktávu). */
-        const val REFERENCE_VERSION = 3
+        const val REFERENCE_VERSION = 5
+
+        @Volatile
+        private var memo: Pair<Long, List<CatalogItem>>? = null
     }
 
     private val cacheFile get() = File(context.filesDir, "catalog_cache.json")
@@ -70,12 +84,17 @@ class CatalogRepository(private val context: Context) {
      * Starší zoznam z webu (napr. pred aktualizáciou aplikácie) tak nikdy neprekryje novší pribalený.
      */
     suspend fun local(): List<CatalogItem> = withContext(Dispatchers.IO) {
+        // rozparsovaný zoznam si pamätáme (≈ 2000 skladieb – parsovanie pri každom otvorení skladby zbytočne zdržuje)
+        val stamp = cacheFile.lastModified()
+        memo?.let { (k, list) -> if (k == stamp) return@withContext list }
         val bundled = context.assets.open("catalog.json").bufferedReader().use { it.readText() }
         val cached = cacheFile.takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
-        if (cached != null && version(cached) > version(bundled)) parse(cached) else {
+        val list = if (cached != null && version(cached) > version(bundled)) parse(cached) else {
             if (cached != null) cacheFile.delete() // zastaraný – zahodiť
             parse(bundled)
         }
+        memo = cacheFile.lastModified() to list
+        list
     }
 
     /** Skúsi stiahnuť novší zoznam z webu (ticho – pri chybe alebo staršej verzii vráti null). */
@@ -90,7 +109,10 @@ class CatalogRepository(private val context: Context) {
                 val bundledVersion = context.assets.open("catalog.json").bufferedReader().use { version(it.readText()) }
                 if (version(text) <= bundledVersion) return@runCatching null
                 val items = parse(text)
-                if (items.isNotEmpty()) cacheFile.writeText(text)
+                if (items.isNotEmpty()) {
+                    cacheFile.writeText(text)
+                    memo = null
+                }
                 items.takeIf { it.isNotEmpty() }
             } finally {
                 conn.disconnect()
@@ -120,6 +142,10 @@ class CatalogRepository(private val context: Context) {
                 featured = o.optBoolean("featured", false),
                 license = o.optString("license"),
                 added = o.optString("added"),
+                tempo = o.optJSONArray("tempo")?.let { a -> (0 until a.length()).map { a.optInt(it) }.filter { it in 20..400 } }
+                    .orEmpty(),
+                parts = o.optJSONArray("parts")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }
+                    .orEmpty(),
             ).takeIf { it.url.startsWith("https://") && it.title.isNotBlank() }
         }
     }
@@ -198,25 +224,31 @@ class CatalogRepository(private val context: Context) {
     suspend fun midiFile(item: CatalogItem): File? = withContext(Dispatchers.IO) {
         if (item.midi.isBlank()) return@withContext null
         val dir = File(context.cacheDir, "catalog_midi").apply { mkdirs() }
-        val f = File(dir, item.id.replace(Regex("[^A-Za-z0-9_.-]"), "_") + ".mid")
+        // „_3“ – staršie MIDI (všetky party za sebou, bez opraveného tempa) sa nepoužijú
+        val f = File(dir, item.id.replace(Regex("[^A-Za-z0-9_.-]"), "_") + "_3.mid")
         if (f.exists() && f.length() > 0) return@withContext f
-        val single = runCatching { fetchStatus(item.midi, f) }.getOrElse { return@withContext null } // bez internetu
-        if (single == 200 && f.length() > 0) return@withContext f
-        // viac častí: <názov>-mids.zip
         val zip = File(dir, f.nameWithoutExtension + "-mids.zip")
-        val zipUrl = item.midi.removeSuffix(".mid") + "-mids.zip"
+        // katalóg uvádza priamo ZIP (viac MIDI) – inak .mid a pre istotu ZIP
+        val zipUrl = if (item.midi.endsWith(".zip", ignoreCase = true)) item.midi
+        else item.midi.removeSuffix(".mid") + "-mids.zip"
+        var single = 0
+        if (!item.midi.endsWith(".zip", ignoreCase = true)) {
+            single = runCatching { fetchStatus(item.midi, f) }.getOrElse { return@withContext null } // bez internetu
+            if (single == 200 && f.length() > 0) {
+                if (item.tempo.isNotEmpty()) runCatching { fixTempo(f, item.tempo.first()) }
+                return@withContext f
+            }
+        }
         val zipped = runCatching { fetchStatus(zipUrl, zip) }.getOrElse { return@withContext null }
         if (zipped == 200 && zip.length() > 0) {
-            val merged = runCatching { mergeZip(zip, f) }.getOrDefault(false)
+            val merged = runCatching { mergeZip(zip, f, item.parts, item.tempo) }.getOrDefault(false)
             zip.delete()
             if (merged) return@withContext f
         }
-        if (single == 404 && zipped == 404) markNoMidi(item.id)
-        f.delete()
+        if ((single == 404 || single == 0) && zipped == 404) markNoMidi(item.id)
         null
     }
 
-    /** Stiahne súbor; vráti HTTP kód (200 = OK). Pri chybe siete vyhodí výnimku. */
     private fun fetchStatus(url: String, target: File): Int {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
@@ -236,29 +268,60 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
-    /** Spojí MIDI časti zo ZIP-u (v poradí podľa čísla časti) do jedného súboru s 1,5 s pauzou medzi časťami. */
-    private fun mergeZip(zip: File, target: File): Boolean {
-        val parts = ArrayList<Pair<String, ByteArray>>()
+    /**
+     * Z MIDI v ZIP-e vyberie tie, ktoré patria k notám ([parts] – napr. partitúra, nie jednotlivé party),
+     * a spojí ich za sebou (podľa čísla časti) s 1,5 s pauzou. Bez [parts]: najprv súbory určené na MIDI
+     * („midi…“), potom partitúra („score…“), inak všetky.
+     */
+    private fun mergeZip(zip: File, target: File, parts: List<String> = emptyList(), tempo: List<Int> = emptyList()): Boolean {
+        val all = ArrayList<Pair<String, ByteArray>>()
         java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
             while (true) {
                 val e = zin.nextEntry ?: break
-                if (!e.isDirectory && e.name.endsWith(".mid", ignoreCase = true)) parts.add(e.name to zin.readBytes())
+                if (!e.isDirectory && e.name.endsWith(".mid", ignoreCase = true)) all.add(e.name to zin.readBytes())
             }
         }
-        if (parts.isEmpty()) return false
+        if (all.isEmpty()) return false
+        val chosen = ZipPick.select(all.map { it.first }, parts, ".mid").map { n -> all.first { it.first == n } }
+        val list = ArrayList(chosen.ifEmpty { all })
+        // poradie: podľa výberu ([parts]), v rámci neho podľa čísla časti
         fun number(name: String) = Regex("(\\d+)\\.mid$", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        parts.sortWith(compareBy({ number(it.first) }, { it.first }))
-        val all = ArrayList<com.daklok.crescendo.data.midi.NoteEvent>()
+        if (parts.isEmpty()) list.sortWith(compareBy({ number(it.first) }, { it.first }))
+        val events = ArrayList<com.daklok.crescendo.data.midi.NoteEvent>()
         var offset = 0.0
-        for ((_, bytes) in parts) {
-            val events = runCatching { com.daklok.crescendo.data.midi.MidiFile.parse(bytes) }.getOrNull() ?: continue
-            if (events.isEmpty()) continue
-            all += events.map { it.copy(time = it.time + offset) }
-            offset += events.maxOf { it.time } + 1.5
+        for ((index, entry) in list.withIndex()) {
+            val bytes = entry.second
+            var ev = runCatching { com.daklok.crescendo.data.midi.MidiFile.parse(bytes) }.getOrNull() ?: continue
+            if (ev.isEmpty()) continue
+            // časť bez tempa (LilyPond 4 = 60) → správne tempo z katalógu
+            val bpm = tempo.getOrNull(index) ?: tempo.lastOrNull()
+            if (bpm != null && !com.daklok.crescendo.data.midi.MidiFile.hasRealTempo(bytes)) {
+                val k = com.daklok.crescendo.data.midi.MidiFile.tempoFactor(bytes, bpm)
+                ev = ev.map { it.copy(time = it.time * k) }
+            }
+            events += ev.map { it.copy(time = it.time + offset) }
+            offset += ev.maxOf { it.time } + 1.5
         }
-        if (all.none { it.status == 0x90 }) return false
-        com.daklok.crescendo.data.midi.MidiFile.write(target, all)
+        if (events.none { it.status == 0x90 }) return false
+        com.daklok.crescendo.data.midi.MidiFile.write(target, events)
         return target.length() > 0
+    }
+
+    /** MIDI bez tempa (LilyPond 4 = 60) prepíše na správne tempo [bpm] – stopy ostanú zachované. */
+    private fun fixTempo(f: File, bpm: Int) {
+        val bytes = f.readBytes()
+        if (com.daklok.crescendo.data.midi.MidiFile.hasRealTempo(bytes)) return
+        val k = com.daklok.crescendo.data.midi.MidiFile.tempoFactor(bytes, bpm)
+        val ev = com.daklok.crescendo.data.midi.MidiFile.parse(bytes).map { it.copy(time = it.time * k) }
+        if (ev.none { it.status == 0x90 }) return
+        val tmp = File(f.path + ".tmp")
+        com.daklok.crescendo.data.midi.MidiFile.write(tmp, ev)
+        if (tmp.length() > 0) {
+            if (!tmp.renameTo(f)) {
+                tmp.copyTo(f, overwrite = true)
+                tmp.delete()
+            }
+        }
     }
 
     /**
@@ -272,7 +335,10 @@ class CatalogRepository(private val context: Context) {
         try {
             val cached = midiFile(item) ?: return
             // MIDI ku skladbe – vizualizér (padajúce noty) je pripravený hneď po stiahnutí
-            val mid = pieceMidi.catalogFile(pieceId) ?: pieceMidi.setCatalog(pieceId, cached, item.renderHint) ?: cached
+            // zastaraná skladba (opravené tempo / výber partitúry) – aj MIDI pre vizualizér sa nahradí novým
+            val stale = audio.hasOfficial(pieceId) && officialOutdated(pieceId, item)
+            val mid = (if (stale) null else pieceMidi.catalogFile(pieceId))
+                ?: pieceMidi.setCatalog(pieceId, cached, item.renderHint) ?: cached
             if (audio.hasOfficial(pieceId) && !officialOutdated(pieceId, item)) return
             val sound = com.daklok.crescendo.data.midi.MidiRenderer.renderNow(
                 context,
@@ -311,7 +377,8 @@ class CatalogRepository(private val context: Context) {
      * Klavírne skladby sa nemenili.
      */
     fun officialOutdated(pieceId: Long, item: CatalogItem): Boolean =
-        item.renderHint != "piano" && prefs.getInt("ref_v_$pieceId", 1) < REFERENCE_VERSION
+        (item.renderHint != "piano" || item.tempo.isNotEmpty() || item.parts.isNotEmpty()) &&
+            prefs.getInt("ref_v_$pieceId", 1) < REFERENCE_VERSION
 
     /** Pri otvorení skladby: ak je oficiálna nahrávka zastaraná, na pozadí ju vyrobí znova. */
     suspend fun refreshOfficialIfOutdated(pieceId: Long, audio: PieceAudio) {
@@ -342,6 +409,39 @@ class CatalogRepository(private val context: Context) {
     private val _referenceJobs = kotlinx.coroutines.flow.MutableStateFlow<Map<Long, Float>>(emptyMap())
     val referenceJobs: kotlinx.coroutines.flow.StateFlow<Map<Long, Float>> = _referenceJobs
 
+    /**
+     * Z ZIP-u s PDF vyberie noty ([parts], inak partitúru, inak najväčší súbor) a uloží ich do [target];
+     * viac vybraných súborov (časti skladby) spojí za sebou bez straty kvality.
+     */
+    private fun pdfFromZip(zip: File, parts: List<String>, target: File) {
+        val entries = LinkedHashMap<String, ByteArray>()
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
+            while (true) {
+                val e = zin.nextEntry ?: break
+                if (!e.isDirectory && e.name.endsWith(".pdf", ignoreCase = true)) entries[e.name] = zin.readBytes()
+            }
+        }
+        require(entries.isNotEmpty()) { "ZIP has no PDF" }
+        val chosen = ZipPick.select(entries.keys.toList(), parts, ".pdf").ifEmpty {
+            listOf(entries.maxBy { it.value.size }.key)
+        }
+        if (chosen.size == 1) {
+            target.writeBytes(entries.getValue(chosen[0]))
+            return
+        }
+        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(context.applicationContext)
+        com.tom_roush.pdfbox.pdmodel.PDDocument().use { out ->
+            val merger = com.tom_roush.pdfbox.multipdf.PDFMergerUtility()
+            val opened = chosen.map { com.tom_roush.pdfbox.pdmodel.PDDocument.load(entries.getValue(it)) }
+            try {
+                opened.forEach { merger.appendDocument(out, it) }
+                out.save(target)
+            } finally {
+                opened.forEach { runCatching { it.close() } }
+            }
+        }
+    }
+
     /** Stiahne PDF a pridá ho do knižnice (do [folderId]). Vráti ID novej skladby. */
     suspend fun download(
         item: CatalogItem,
@@ -363,6 +463,16 @@ class CatalogRepository(private val context: Context) {
                     conn.disconnect()
                 }
                 onProgress(-1f) // import do knižnice – bez presného priebehu
+                // Mutopia má niektoré skladby len ako ZIP s viacerými PDF (partitúra + party, časti zvlášť)
+                if (item.url.endsWith(".zip", ignoreCase = true)) {
+                    val zip = File(dir, "${item.id.ifBlank { "piece" }}-pdfs.zip")
+                    tmp.renameTo(zip)
+                    try {
+                        pdfFromZip(zip, item.parts, tmp)
+                    } finally {
+                        zip.delete()
+                    }
+                }
                 val result = library.importPdf(Uri.fromFile(tmp), folderId, item.localizedTitle())
                 result.onSuccess { id ->
                     library.getPiece(id)?.let { piece ->
@@ -384,4 +494,50 @@ class CatalogRepository(private val context: Context) {
                 tmp.delete()
             }
         }
+}
+
+/**
+ * Výber súborov zo ZIP-u Mutopie podľa názvov zdrojov ([parts]): „score“ zodpovedá napr. „score-a4.pdf“,
+ * „bach-air-score.mid“ aj „score-1.mid“ (viac častí). Bez [parts] – súbory na MIDI / partitúra.
+ */
+internal object ZipPick {
+    private fun norm(name: String, ext: String): String =
+        name.substringAfterLast('/').lowercase().removeSuffix(ext)
+            .replace(Regex("-(a4|let|letter)$"), "")
+
+    private fun stripNumber(n: String) = n.replace(Regex("[-_]\\d+$"), "")
+
+    private fun matches(entry: String, part: String): Boolean {
+        val p = part.substringAfterLast('/').lowercase().replace(Regex("-(a4|let|letter)$"), "")
+        val e = entry
+        return e == p || stripNumber(e) == p ||
+            (e.endsWith(p) && !e[e.length - p.length - 1].isLetterOrDigit()) ||
+            (stripNumber(e).endsWith(p) && stripNumber(e).let { !it[it.length - p.length - 1].isLetterOrDigit() })
+    }
+
+    fun select(names: List<String>, parts: List<String>, ext: String): List<String> {
+        val normed = names.associateWith { norm(it, ext) }
+        if (parts.isNotEmpty()) {
+            val out = ArrayList<String>()
+            for (p in parts) {
+                val pn = p.substringAfterLast('/').lowercase().replace(Regex("-(a4|let|letter)$"), "")
+                // najprv presná zhoda („score“ ≠ „cello-score“), až potom koniec názvu
+                val exact = normed.filter { (n, e) -> n !in out && (e == pn || stripNumber(e) == pn) }.keys
+                (exact.ifEmpty { normed.filter { (n, e) -> n !in out && matches(e, p) }.keys })
+                    .sortedBy { Regex("(\\d+)$").find(normed.getValue(it))?.groupValues?.get(1)?.toIntOrNull() ?: 0 }
+                    .let { out.addAll(it) }
+            }
+            if (out.isNotEmpty()) return out
+        }
+        fun ordered(keys: Collection<String>) = keys.sortedWith(
+            compareBy({ stripNumber(normed.getValue(it)) }, { Regex("(\\d+)$").find(normed.getValue(it))?.groupValues?.get(1)?.toIntOrNull() ?: 0 }),
+        )
+        if (ext == ".mid") {
+            normed.filter { (_, e) -> e.contains("midi") }.keys.takeIf { it.isNotEmpty() }?.let { return ordered(it) }
+        }
+        val score = normed.filter { (_, e) ->
+            Regex("(score|partitur|conductor|-all$|^all$|main)").containsMatchIn(e) && !e.contains("transpos")
+        }.keys
+        return ordered(score)
+    }
 }

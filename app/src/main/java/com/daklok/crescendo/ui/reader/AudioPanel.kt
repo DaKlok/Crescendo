@@ -917,7 +917,7 @@ private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
             Text(formatClock(player.duration), style = MaterialTheme.typography.labelMedium)
         }
         HorizontalDivider(Modifier.padding(vertical = 6.dp), color = scheme.onSecondaryContainer.copy(alpha = 0.12f))
-        // rýchlosť – jeden posuvník (40–150 %), ťuk na percentá = späť na 100 %
+        // rýchlosť – jeden posuvník (40–200 %), ťuk na percentá = späť na 100 %
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Speed, null, Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -925,7 +925,7 @@ private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
             Slider(
                 value = player.speed,
                 onValueChange = { v -> player.setPlaybackSpeed((v * 20).roundToInt() / 20f) },
-                valueRange = 0.4f..1.5f,
+                valueRange = 0.4f..2f,
                 colors = colors,
                 modifier = Modifier
                     .weight(1f)

@@ -116,13 +116,21 @@ fun VisualizerPanel(
     val refJobs by app.catalog.referenceJobs.collectAsStateWithLifecycle()
 
     // skladba (noty) z MIDI
-    var song by remember { mutableStateOf<VisSong?>(null) }
-    var hasMidi by remember { mutableStateOf(false) }
+    // či MIDI existuje, vieme hneď (bez čakania) – a už rozparsovanú skladbu si pamätáme, takže
+    // pri ďalšom otvorení je tam okamžite; inak sa kým sa číta, ukáže načítavanie (nie „nemáš MIDI“)
+    val midiFile = remember(pieceId, midiVersion) { app.pieceMidi.file(pieceId) }
+    val hasMidi = midiFile != null
+    val songKey = midiFile?.let { it.path + ":" + it.lastModified() + ":" + it.length() }
+    var song by remember(songKey) { mutableStateOf(songKey?.let { VisSongCache.get(it) }) }
+    var songLoading by remember(songKey) { mutableStateOf(song == null && hasMidi) }
     var importError by remember { mutableStateOf(false) }
-    LaunchedEffect(pieceId, midiVersion) {
-        val f = app.pieceMidi.file(pieceId)
-        hasMidi = f != null
-        song = f?.let { withContext(Dispatchers.Default) { runCatching { VisSong.from(MidiFile.read(it)) }.getOrNull() } }
+    LaunchedEffect(songKey) {
+        val f = midiFile ?: return@LaunchedEffect
+        if (song != null) return@LaunchedEffect
+        val parsed = withContext(Dispatchers.Default) { runCatching { VisSong.from(MidiFile.read(f)) }.getOrNull() }
+        if (parsed != null && songKey != null) VisSongCache.put(songKey, parsed)
+        song = parsed
+        songLoading = false
     }
 
     // zvuk
@@ -367,6 +375,18 @@ fun VisualizerPanel(
             }
 
             val s = song
+            if (songLoading) {
+                // MIDI sa ešte číta – len krátke načítavanie v paneli
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(if (compact) 200.dp else 280.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp)
+                }
+                return@Column
+            }
             if (!hasMidi || s == null) {
                 EmptyVisualizer(
                     error = importError,
@@ -435,7 +455,7 @@ fun VisualizerPanel(
                             }
                         }
                     }
-                    // rýchlosť – jeden posuvník (40–150 %), ťuk na percentá = späť na 100 %
+                    // rýchlosť – jeden posuvník (40–200 %), ťuk na percentá = späť na 100 %
                     val speedRow: @Composable (Modifier) -> Unit = { m ->
                         Row(m, verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.Speed, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -448,7 +468,7 @@ fun VisualizerPanel(
                                         player.setPlaybackSpeed(sp)
                                     }
                                 },
-                                valueRange = 0.4f..1.5f,
+                                valueRange = 0.4f..2f,
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 8.dp),
@@ -870,4 +890,27 @@ private fun SourcePicker(
             )
         }
     }
+}
+
+/** Rozparsované skladby (posledné 4) – opätovné otvorenie vizualizéra je okamžité. */
+private object VisSongCache {
+    private val map = object : LinkedHashMap<String, VisSong>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, VisSong>?) = size > 4
+    }
+
+    @Synchronized
+    fun get(key: String): VisSong? = map[key]
+
+    @Synchronized
+    fun put(key: String, song: VisSong) {
+        map[key] = song
+    }
+}
+
+/** Pri otvorení skladby: MIDI sa rozparsuje vopred na pozadí, aby bol vizualizér hneď pripravený. */
+suspend fun prewarmVisualizer(app: CrescendoApp, pieceId: Long) = withContext(Dispatchers.Default) {
+    val f = app.pieceMidi.file(pieceId) ?: return@withContext
+    val key = f.path + ":" + f.lastModified() + ":" + f.length()
+    if (VisSongCache.get(key) != null) return@withContext
+    runCatching { VisSong.from(MidiFile.read(f)) }.getOrNull()?.let { VisSongCache.put(key, it) }
 }

@@ -106,6 +106,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -800,14 +801,22 @@ private fun PieceCard(
     onComposer: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    // stiahnuté skladby (už sú v knižnici) majú inú farbu – na prvý pohľad vidno, čo už máš
+    val inLibrary = state == DownloadState.DONE
     val container by animateColorAsState(
-        if (expanded) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
+        when {
+            inLibrary && expanded -> scheme.secondaryContainer
+            inLibrary -> scheme.secondaryContainer.copy(alpha = 0.7f).compositeOver(scheme.surfaceContainerHigh)
+            expanded -> scheme.surfaceContainerHighest
+            else -> scheme.surfaceContainerHigh
+        },
         label = "card",
     )
     Surface(
         onClick = onToggle,
         shape = RoundedCornerShape(if (expanded) 28.dp else 22.dp),
         color = container,
+        contentColor = if (inLibrary) scheme.onSecondaryContainer else scheme.onSurface,
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(Motion.snappy()),
@@ -865,7 +874,7 @@ private fun PieceCard(
                     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                         when (s) {
                             DownloadState.LOADING -> ProgressCircle(downloadProgress, 28.dp)
-                            DownloadState.DONE -> FilledTonalIconButton(onClick = onDownload) {
+                            DownloadState.DONE -> androidx.compose.material3.FilledIconButton(onClick = onDownload) {
                                 Icon(Icons.Outlined.Check, stringResource(R.string.catalog_in_library))
                             }
                             DownloadState.IDLE -> FilledTonalIconButton(onClick = onDownload) {

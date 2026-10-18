@@ -16,52 +16,92 @@ object MidiFile {
     private const val DIVISION = 500
     private const val TEMPO_US = 500_000
 
-    /** Zapíše udalosti ako MIDI súbor (formát 0, jeden kanál). */
+    /**
+     * Zapíše udalosti ako MIDI súbor (tempo 120 BPM, 1 tik = 1 ms). Udalosti z viacerých stôp ([NoteEvent.track])
+     * sa zapíšu do samostatných stôp (formát 1) – rozdelenie na hlasy ostane zachované.
+     */
     fun write(file: File, events: List<NoteEvent>) {
-        val track = ByteArrayOutputStream()
-        fun vlq(value: Long) {
-            var v = value.coerceAtLeast(0)
-            val bytes = ArrayList<Int>()
-            bytes.add((v and 0x7F).toInt())
-            v = v shr 7
-            while (v > 0) {
-                bytes.add(((v and 0x7F) or 0x80).toInt())
+        val byTrack = events.groupBy { it.track }.toSortedMap()
+        val single = byTrack.size <= 1
+        fun trackBytes(list: List<NoteEvent>, withTempo: Boolean): ByteArray {
+            val track = ByteArrayOutputStream()
+            fun vlq(value: Long) {
+                var v = value.coerceAtLeast(0)
+                val bytes = ArrayList<Int>()
+                bytes.add((v and 0x7F).toInt())
                 v = v shr 7
+                while (v > 0) {
+                    bytes.add(((v and 0x7F) or 0x80).toInt())
+                    v = v shr 7
+                }
+                for (i in bytes.indices.reversed()) track.write(bytes[i])
             }
-            for (i in bytes.indices.reversed()) track.write(bytes[i])
+            if (withTempo) {
+                vlq(0)
+                track.write(byteArrayOf(0xFF.toByte(), 0x51, 0x03, 0x07, 0xA1.toByte(), 0x20))
+            }
+            var lastTick = 0L
+            for (e in list.sortedBy { it.time }) {
+                val tick = Math.round(e.time * 1000.0).coerceAtLeast(lastTick)
+                vlq(tick - lastTick)
+                lastTick = tick
+                track.write((e.status and 0xF0) or (e.channel and 0x0F))
+                track.write(e.data1 and 0x7F)
+                if (e.status and 0xF0 != 0xC0) track.write(e.data2 and 0x7F)
+            }
+            vlq(0)
+            track.write(byteArrayOf(0xFF.toByte(), 0x2F, 0x00))
+            return track.toByteArray()
         }
-        // tempo
-        vlq(0)
-        track.write(byteArrayOf(0xFF.toByte(), 0x51, 0x03, 0x07, 0xA1.toByte(), 0x20))
-        // zvuk: akustický klavír
-        vlq(0)
-        track.write(0xC0)
-        track.write(0)
-        var lastTick = 0L
-        for (e in events.sortedBy { it.time }) {
-            val tick = Math.round(e.time * 1000.0).coerceAtLeast(lastTick)
-            vlq(tick - lastTick)
-            lastTick = tick
-            track.write((e.status and 0xF0) or (e.channel and 0x0F))
-            track.write(e.data1 and 0x7F)
-            if (e.status and 0xF0 != 0xC0) track.write(e.data2 and 0x7F)
+        val tracks = if (single) {
+            // jedna stopa: ak v nej nie je nastavený nástroj, akustický klavír
+            val list = events.toMutableList()
+            if (list.none { it.status == 0xC0 }) list.add(0, NoteEvent(0.0, 0xC0, 0, 0))
+            listOf(trackBytes(list, true))
+        } else {
+            listOf(trackBytes(emptyList(), true)) + byTrack.values.map { trackBytes(it, false) }
         }
-        vlq(0)
-        track.write(byteArrayOf(0xFF.toByte(), 0x2F, 0x00))
-
-        val body = track.toByteArray()
         val out = ByteArrayOutputStream()
         fun int32(v: Int) = out.write(byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte()))
         fun int16(v: Int) = out.write(byteArrayOf((v ushr 8).toByte(), v.toByte()))
         out.write("MThd".toByteArray(Charsets.US_ASCII))
         int32(6)
-        int16(0)
-        int16(1)
+        int16(if (single) 0 else 1)
+        int16(tracks.size)
         int16(DIVISION)
-        out.write("MTrk".toByteArray(Charsets.US_ASCII))
-        int32(body.size)
-        out.write(body)
+        for (body in tracks) {
+            out.write("MTrk".toByteArray(Charsets.US_ASCII))
+            int32(body.size)
+            out.write(body)
+        }
         file.writeBytes(out.toByteArray())
+    }
+
+    /**
+     * Má MIDI skutočné tempo? LilyPond bez \tempo zapíše predvolené 4 = 60 (alebo žiadne) –
+     * vtedy skladba hrá oveľa pomalšie, než má.
+     */
+    fun hasRealTempo(data: ByteArray): Boolean {
+        val t = firstTempo(data) ?: return false
+        return t != 1_000_000
+    }
+
+    /** Prvé tempo v súbore (µs na štvrťovú notu) alebo null, ak tam žiadne nie je (= 120 BPM). */
+    private fun firstTempo(data: ByteArray): Int? {
+        var i = 0
+        while (i + 5 < data.size) {
+            if (data[i] == 0xFF.toByte() && data[i + 1] == 0x51.toByte() && data[i + 2] == 0x03.toByte()) {
+                return ((data[i + 3].toInt() and 0xFF) shl 16) or ((data[i + 4].toInt() and 0xFF) shl 8) or (data[i + 5].toInt() and 0xFF)
+            }
+            i++
+        }
+        return null
+    }
+
+    /** O koľko treba časy vynásobiť, aby skladba bez tempa hrala v [bpm] (štvrťové noty za minútu). */
+    fun tempoFactor(data: ByteArray, bpm: Int): Double {
+        val current = 60_000_000.0 / (firstTempo(data) ?: TEMPO_US)
+        return current / bpm
     }
 
     /**

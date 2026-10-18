@@ -71,7 +71,10 @@ object SyncState {
         val files = c.filesDir
         val dirs = listOf("pdfs", "annotations", "audio", "recordings", "datastore", "piece_midi")
         val db = c.getDatabasePath("crescendo.db")
-        val candidates = sequenceOf(db, File(db.path + "-wal")) +
+        // nastavenia, ktoré sú v zálohe (napr. vybraná referenčná nahrávka, skladby z katalógu)
+        val prefsDir = File(c.applicationInfo.dataDir, "shared_prefs")
+        val prefs = listOf("annotation_tools", "metronome", "catalog", "reference_audio", "practice").map { File(prefsDir, "$it.xml") }
+        val candidates = sequenceOf(db, File(db.path + "-wal")) + prefs.asSequence() +
             dirs.asSequence().flatMap { File(files, it).walkTopDown().filter { f -> f.isFile } }
         // prázdny -wal vytvorí SQLite už pri otvorení databázy (napr. po obnove) – to nie je zmena
         return candidates.any { it.exists() && it.length() > 0 && it.lastModified() > since }

@@ -102,8 +102,13 @@ object MidiRenderer {
             val key = mid.path + opt.suffix
             _rendering.update { it + (key to 0f) }
             try {
-                val ok = runCatching { lock.withLock { render(context.applicationContext, mid, opt, onProgress) } }
-                    .getOrDefault(false)
+                val ok = try {
+                    lock.withLock { render(context.applicationContext, mid, opt, onProgress) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    false
+                }
                 if (ok) playable(context, mid, opt) else null
             } finally {
                 _rendering.update { it - key }
@@ -113,6 +118,8 @@ object MidiRenderer {
 
     private fun render(context: Context, mid: File, opt: RenderOptions, onProgress: (Float) -> Unit): Boolean {
         if (!mid.exists()) return false
+        // kým sme čakali na zámok, mohol ten istý zvuk vyrobiť niekto iný (vizualizér aj nahrávky naraz)
+        if (playable(context, mid, opt) != null) return true
         var events = MidiFile.read(mid)
         if (events.isEmpty()) return false
         if (opt.maxSeconds > 0) events = cut(events, opt.maxSeconds)

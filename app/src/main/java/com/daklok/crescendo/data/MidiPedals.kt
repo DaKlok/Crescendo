@@ -136,34 +136,51 @@ class MidiPedals(private val context: Context) {
                     break
                 }
             }
+            // rozbor správ aj s „running status“ (Bluetooth MIDI posiela pedál často bez opakovania statusu)
             var i = offset
             val end = offset + count
             while (i < end) {
-                val status = msg[i].toInt() and 0xFF
+                val b = msg[i].toInt() and 0xFF
                 when {
-                    status and 0xF0 == 0xB0 && i + 2 < end -> {
-                        val cc = msg[i + 1].toInt() and 0x7F
-                        val value = msg[i + 2].toInt() and 0x7F
-                        val down = value >= 64
-                        if (ccDown[cc] != down) {
-                            ccDown[cc] = down
-                            _events.tryEmit(PedalEvent(cc, down))
-                        }
-                        i += 3
-                    }
-                    status == 0xF0 -> {
+                    b >= 0xF8 -> i++ // real-time (clock, active sensing) – running status nemení
+                    b == 0xF0 -> {
                         // systémová správa – preskočíme po koniec (0xF7)
                         while (i < end && (msg[i].toInt() and 0xFF) != 0xF7) i++
                         i++
+                        running = 0
                     }
-                    status >= 0xF8 -> i += 1
-                    status and 0xF0 == 0xC0 || status and 0xF0 == 0xD0 -> i += 2
-                    status >= 0x80 -> i += 3
-                    else -> i += 1
+                    b >= 0xF0 -> {
+                        i++
+                        running = 0
+                    }
+                    else -> {
+                        val status = if (b >= 0x80) {
+                            running = b
+                            i++
+                            b
+                        } else running
+                        if (status == 0) {
+                            i++
+                        } else {
+                            val type = status and 0xF0
+                            val len = if (type == 0xC0 || type == 0xD0) 1 else 2
+                            if (i + len > end) break
+                            if (type == 0xB0) {
+                                val cc = msg[i].toInt() and 0x7F
+                                val down = (msg[i + 1].toInt() and 0x7F) >= 64
+                                if (ccDown[cc] != down) {
+                                    ccDown[cc] = down
+                                    _events.tryEmit(PedalEvent(cc, down))
+                                }
+                            }
+                            i += len
+                        }
+                    }
                 }
             }
         }
     }
+    private var running = 0
 
     private val callback = object : MidiManager.DeviceCallback() {
         override fun onDeviceAdded(device: MidiDeviceInfo) {
@@ -211,9 +228,10 @@ class MidiPedals(private val context: Context) {
         m.openDevice(info, { device -> attach(info, device) }, handler)
     }
 
-    private fun attach(info: MidiDeviceInfo, device: MidiDevice?) {
+    private fun attach(info: MidiDeviceInfo, device: MidiDevice?, explicit: Boolean = false) {
         if (device == null) return
-        if (_manualOff.value) {
+        // automatické pripojenie dobehlo až po zatvorení čítačky (nikto nepočúva) alebo po ručnom odpojení
+        if (_manualOff.value || (users == 0 && !explicit)) {
             runCatching { device.close() }
             return
         }
@@ -270,7 +288,7 @@ class MidiPedals(private val context: Context) {
 
     /** Pripojí Bluetooth MIDI klavír; po pripojení sa objaví medzi nástrojmi. */
     @android.annotation.SuppressLint("MissingPermission")
-    fun connectBluetooth(device: BluetoothDevice, onResult: (Boolean) -> Unit = {}) {
+    fun connectBluetooth(device: BluetoothDevice, explicit: Boolean = true, onResult: (Boolean) -> Unit = {}) {
         val m = manager ?: return onResult(false)
         if (!hasBluetoothPermission()) return onResult(false)
         _manualOff.value = false // výber klavíra v zozname = chce sa pripojiť
@@ -279,7 +297,7 @@ class MidiPedals(private val context: Context) {
                 if (midi == null) {
                     onResult(false)
                 } else {
-                    attach(midi.info, midi)
+                    attach(midi.info, midi, explicit)
                     if (opened.containsKey(midi.info.id)) btAddresses[midi.info.id] = device.address
                     onResult(true)
                 }
@@ -294,7 +312,7 @@ class MidiPedals(private val context: Context) {
         if (_manualOff.value) return // ručne odpojený
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
         val device = runCatching { adapter.getRemoteDevice(address) }.getOrNull() ?: return
-        connectBluetooth(device)
+        connectBluetooth(device, explicit = false)
     }
 
     companion object {
