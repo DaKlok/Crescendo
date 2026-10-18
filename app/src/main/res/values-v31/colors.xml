@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- widget na domovskej obrazovke -->
+    <color name="widget_bg">@android:color/system_neutral1_50</color>
+</resources>

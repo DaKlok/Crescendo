@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- widget na domovskej obrazovke -->
+    <color name="widget_bg">#FF1E1E22</color>
+    <!-- v tmavom režime je tlačidlo svetlé – tmavšia odozva -->
+    <color name="widget_ripple">#29000000</color>
+</resources>

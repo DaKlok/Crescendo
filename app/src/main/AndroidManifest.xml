@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- záloha na Google Drive -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- pripomienka cvičenia -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- režim hrania: počas vystúpenia stíšiť upozornenia (ak to používateľ povolí) -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- pedál klavíra cez Bluetooth MIDI -->
@@ -72,6 +76,58 @@
                 <data android:mimeType="application/zip" />
             </intent-filter>
         </activity>
+
+        <!-- widget: dnešné cvičenie a posledná skladba -->
+        <receiver
+            android:name=".widget.PracticeWidget"
+            android:exported="false"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/practice_widget_info" />
+        </receiver>
+
+        <!-- widget: týždeň v stĺpčekoch -->
+        <receiver
+            android:name=".widget.WeekWidget"
+            android:exported="false"
+            android:label="@string/widget_week_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/week_widget_info" />
+        </receiver>
+
+        <!-- widget: len krúžok a séria -->
+        <receiver
+            android:name=".widget.RingWidget"
+            android:exported="false"
+            android:label="@string/widget_ring_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ring_widget_info" />
+        </receiver>
+
+        <!-- widget: krúžok a tlačidlo pokračovať -->
+        <receiver
+            android:name=".widget.RingPieceWidget"
+            android:exported="false"
+            android:label="@string/widget_ring_piece_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ring_piece_widget_info" />
+        </receiver>
 
         <!-- zdieľanie exportovaných PDF -->
         <provider

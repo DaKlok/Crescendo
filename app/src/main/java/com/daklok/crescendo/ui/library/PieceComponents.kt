@@ -58,6 +58,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -179,7 +180,6 @@ fun PieceCard(
     onEditDetails: () -> Unit,
     onEditPages: () -> Unit,
     onSplit: () -> Unit,
-    onShare: () -> Unit,
     modifier: Modifier = Modifier,
     selectionMode: Boolean = false,
     selected: Boolean = false,
@@ -303,13 +303,8 @@ fun PieceCard(
                         onClick = { menuOpen = false; onAddToSetlist() },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.share_piece)) },
-                        leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                        onClick = { menuOpen = false; onShare() },
-                    )
-                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.export_pdf)) },
-                        leadingIcon = { Icon(Icons.Outlined.IosShare, null) },
+                        leadingIcon = { Icon(Icons.Outlined.Share, null) },
                         onClick = { menuOpen = false; onExport() },
                     )
                     DropdownMenuItem(
@@ -541,6 +536,40 @@ fun ContinueCard(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.page_n, piece.lastPage + 1))
                 }
+            }
+        }
+    }
+}
+
+/** Malá karta naposledy otvorenej skladby (pás pod „Pokračovať“). */
+@Composable
+fun RecentChip(piece: PieceEntity, thumb: File?, onOpen: () -> Unit) {
+    val haptic = rememberHaptic()
+    Surface(
+        onClick = {
+            haptic(HapticFeedbackType.TextHandleMove)
+            onOpen()
+        },
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.width(220.dp),
+    ) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            ThumbImage(
+                file = thumb,
+                modifier = Modifier
+                    .width(36.dp)
+                    .aspectRatio(0.74f)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(piece.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(R.string.page_n, piece.lastPage + 1),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

@@ -69,11 +69,11 @@ object SyncState {
     fun hasLocalChanges(c: Context): Boolean {
         val since = lastSyncLocal(c) + 2_000
         val files = c.filesDir
-        val dirs = listOf("pdfs", "annotations", "audio", "recordings", "datastore", "piece_midi")
+        val dirs = listOf("pdfs", "annotations", "audio", "recordings", "datastore", "piece_midi", "bookmarks")
         val db = c.getDatabasePath("crescendo.db")
         // nastavenia, ktoré sú v zálohe (napr. vybraná referenčná nahrávka, skladby z katalógu)
         val prefsDir = File(c.applicationInfo.dataDir, "shared_prefs")
-        val prefs = listOf("annotation_tools", "metronome", "catalog", "reference_audio", "practice").map { File(prefsDir, "$it.xml") }
+        val prefs = listOf("annotation_tools", "metronome", "catalog", "reference_audio", "practice", "shared_links").map { File(prefsDir, "$it.xml") }
         val candidates = sequenceOf(db, File(db.path + "-wal")) + prefs.asSequence() +
             dirs.asSequence().flatMap { File(files, it).walkTopDown().filter { f -> f.isFile } }
         // prázdny -wal vytvorí SQLite už pri otvorení databázy (napr. po obnove) – to nie je zmena

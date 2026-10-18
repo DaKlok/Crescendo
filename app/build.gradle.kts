@@ -19,11 +19,21 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // zmenšenie a optimalizácia kódu (R8) + odstránenie nepoužitých zdrojov
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // „staging“ = rovnaké ako release (R8), ale podpísané ladiacim kľúčom – na vyskúšanie
+        // release verzie priamo z Android Studia (Build Variants → staging), prepíše debug verziu
+        create("staging") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            versionNameSuffix = "-staging"
         }
     }
 

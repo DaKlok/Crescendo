@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- skratka: noty -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#E3E6FF" android:pathData="M24,24m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+    <path android:fillColor="#3A4FA0" android:pathData="M29,13v13.6c-0.9,-0.4 -1.9,-0.6 -3,-0.6c-3.3,0 -6,2.2 -6,5s2.7,5 6,5s6,-2.2 6,-5V18h4v-5H29z" />
+</vector>

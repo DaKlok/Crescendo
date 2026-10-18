@@ -18,6 +18,12 @@ class CrescendoApp : Application() {
         super.attachBaseContext(LanguageManager.wrap(base))
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // pripomienka cvičenia (napr. po obnovení zálohy na novom zariadení)
+        com.daklok.crescendo.data.PracticeReminder.ensure(this)
+    }
+
     val database by lazy { AppDatabase.create(this) }
     val library by lazy { LibraryRepository(this, database.pieceDao(), database.folderDao(), database.setlistDao(), database.practiceDao()) }
     val setlists by lazy { SetlistRepository(database.setlistDao()) }
@@ -28,6 +34,8 @@ class CrescendoApp : Application() {
     val pieceAudio by lazy { com.daklok.crescendo.data.PieceAudio(this) }
     val pieceMidi by lazy { com.daklok.crescendo.data.PieceMidi(this) }
     val catalog by lazy { com.daklok.crescendo.data.CatalogRepository(this) }
+    /** Spoločné noty (skupiny cez Google Drive). */
+    val shared by lazy { com.daklok.crescendo.data.share.SharedRepository(this) }
     /** Pedále klavíra cez MIDI (USB / Bluetooth). */
     val midi by lazy { com.daklok.crescendo.data.MidiPedals(this) }
 

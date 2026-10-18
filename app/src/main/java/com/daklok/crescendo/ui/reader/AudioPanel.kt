@@ -383,6 +383,9 @@ fun AudioPanel(
     // zastaraná oficiálna nahrávka z katalógu (staršia verzia aplikácie) – vyrobí sa znova
     LaunchedEffect(pieceId) { app.appScope.launch { runCatching { app.catalog.refreshOfficialIfOutdated(pieceId, audio) } } }
     val references = remember(pieceId, version) { audio.references(pieceId) }
+    // skladba z katalógu (na obnovenie oficiálnej nahrávky)
+    var catalogItem by remember { mutableStateOf<com.daklok.crescendo.data.CatalogItem?>(null) }
+    LaunchedEffect(pieceId) { catalogItem = runCatching { app.catalog.itemForPiece(pieceId) }.getOrNull() }
     val reference = remember(pieceId, version) { audio.reference(pieceId) }
     val recordings = remember(pieceId, version) { audio.recordings(pieceId) }
 
@@ -536,6 +539,24 @@ fun AudioPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )
+                }
+                // skladba z katalógu bez oficiálnej nahrávky (napr. zmazaná) – dá sa vyrobiť znova
+                if (refJob == null && catalogItem != null && references.none { it.official }) {
+                    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                        Row(Modifier.padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                stringResource(R.string.reference_official_missing),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = {
+                                val item = catalogItem ?: return@TextButton
+                                app.appScope.launch { runCatching { app.catalog.attachReference(item, pieceId, audio) } }
+                            }) { Text(stringResource(R.string.reference_official_restore)) }
+                        }
+                    }
                 }
                 references.forEach { ref ->
                     val active = player.file?.path == ref.file.path

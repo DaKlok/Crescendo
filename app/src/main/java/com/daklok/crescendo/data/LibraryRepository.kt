@@ -305,7 +305,10 @@ class LibraryRepository(
 
     // ───────────── zdieľanie skladby s poznámkami (.crescendo) ─────────────
 
-    /** Zbalí skladbu (PDF, poznámky, údaje, referenčnú nahrávku) do jedného súboru. */
+    /**
+     * Zbalí skladbu do jedného súboru: PDF, poznámky, údaje, záložky, všetky referenčné nahrávky,
+     * vlastné nahrávky a MIDI pre vizualizér – napr. na poslanie učiteľovi.
+     */
     suspend fun exportPackage(piece: PieceEntity, out: File): Unit = withContext(Dispatchers.IO) {
         java.util.zip.ZipOutputStream(out.outputStream().buffered()).use { zip ->
             fun put(name: String, file: File) {
@@ -316,7 +319,7 @@ class LibraryRepository(
             }
             val meta = org.json.JSONObject()
                 .put("format", "crescendo-piece")
-                .put("version", 1)
+                .put("version", 2)
                 .put("title", piece.title)
                 .put("composer", piece.composer)
                 .put("key", piece.keySignature)
@@ -328,7 +331,116 @@ class LibraryRepository(
             zip.closeEntry()
             put("music.pdf", pdfFile(piece))
             put("notes.json", File(context.filesDir, "annotations/${piece.id}.json"))
+            // staršie verzie aplikácie čítajú len „audio.*“ (vybraná nahrávka)
             PieceAudio(context).reference(piece.id)?.let { put("audio." + it.extension, it) }
+            // v2: všetky referenčné nahrávky, vlastné nahrávky, MIDI a záložky
+            PieceAudio(context).references(piece.id).forEach { put("refs/" + it.file.name, it.file) }
+            File(File(context.filesDir, "recordings"), piece.id.toString()).listFiles()
+                ?.filter { it.isFile && it.length() > 0 }?.forEach { put("recordings/" + it.name, it) }
+            File(File(context.filesDir, PieceMidi.DIR), piece.id.toString()).listFiles()
+                ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") }
+                ?.forEach { put("midi/" + it.name, it) }
+            put("bookmarks.json", BookmarkStore(context).file(piece.id))
+        }
+    }
+
+    /** Rozbalí balík .crescendo do [root] (s ochranou pred „../“) a vráti jeho údaje. */
+    private fun extractPackage(input: java.io.InputStream, root: File): org.json.JSONObject {
+        java.util.zip.ZipInputStream(input.buffered()).use { zip ->
+            while (true) {
+                val e = zip.nextEntry ?: break
+                if (e.isDirectory) continue
+                val f = File(root, e.name).canonicalFile
+                if (!f.path.startsWith(root.path)) continue
+                f.parentFile?.mkdirs()
+                f.outputStream().use { zip.copyTo(it) }
+            }
+        }
+        val meta = org.json.JSONObject(File(root, "piece.json").readText())
+        if (meta.optString("format") != "crescendo-piece") error("Not a Crescendo piece")
+        return meta
+    }
+
+    /**
+     * Nahradí obsah existujúcej skladby balíkom (spoločné noty – novšia verzia od iného člena).
+     * Skladba si nechá svoje ID, takže denník cvičenia, setlisty a priečinok ostanú.
+     * Noty, poznámky, záložky a údaje sa prepíšu; nahrávky a MIDI z balíka sa doplnia
+     * (rovnaké súbory sa prepíšu, vlastné ostatné ostanú).
+     */
+    suspend fun updateFromPackage(piece: PieceEntity, file: File): Result<Unit> = withContext(Dispatchers.IO) {
+        val dir = File(context.cacheDir, "pkgu_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val root = dir.canonicalFile
+            val meta = file.inputStream().use { extractPackage(it, root) }
+            val id = piece.id
+
+            // noty: nové PDF vedľa starého, potom výmena (otvorená čítačka nedostane polovičný súbor)
+            val pdf = File(root, "music.pdf")
+            if (pdf.exists() && pdf.length() > 0) {
+                val target = pdfFile(piece)
+                val tmp = File(target.path + ".new")
+                pdf.copyTo(tmp, overwrite = true)
+                var pages = 0
+                ParcelFileDescriptor.open(tmp, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+                    val renderer = openPdfRenderer(fd)
+                    try {
+                        pages = renderer.pageCount
+                        if (pages > 0) {
+                            val thumbName = piece.thumbName ?: (target.nameWithoutExtension + ".png")
+                            renderThumb(renderer, File(thumbDir, thumbName))
+                            if (piece.thumbName == null) dao.setThumb(id, thumbName)
+                        }
+                    } finally {
+                        renderer.closeLocked()
+                    }
+                }
+                if (pages == 0) {
+                    tmp.delete()
+                    error("PDF has no pages")
+                }
+                target.delete()
+                if (!tmp.renameTo(target)) {
+                    tmp.copyTo(target, overwrite = true)
+                    tmp.delete()
+                }
+                dao.setPageCount(id, pages)
+            }
+            updateDetails(
+                piece.copy(
+                    title = meta.optString("title").ifBlank { piece.title },
+                    composer = meta.optString("composer"),
+                    keySignature = meta.optString("key"),
+                    instrument = meta.optString("instrument"),
+                    difficulty = meta.optInt("difficulty"),
+                    tags = meta.optString("tags"),
+                ),
+            )
+            // poznámky a záložky – verzia zo skupiny
+            File(root, "notes.json").takeIf { it.exists() }
+                ?.copyTo(File(File(context.filesDir, "annotations").apply { mkdirs() }, "$id.json"), overwrite = true)
+            File(root, "bookmarks.json").takeIf { it.exists() }?.let { f ->
+                runCatching { BookmarkStore(context).save(id, BookmarkStore.fromJson(f.readText())) }
+            }
+            // referenčné nahrávky – pod pôvodným názvom (pri ďalšej aktualizácii sa nezdvoja)
+            val audio = PieceAudio(context)
+            val refDir = File(File(context.filesDir, "audio"), id.toString()).apply { mkdirs() }
+            File(root, "refs").listFiles()?.filter { it.isFile }?.forEach { f ->
+                if (f.nameWithoutExtension == "official") audio.setOfficial(id, f)
+                else f.copyTo(File(refDir, f.name), overwrite = true)
+            }
+            for (sub in listOf("recordings" to File(File(context.filesDir, "recordings"), id.toString()),
+                "midi" to File(File(context.filesDir, PieceMidi.DIR), id.toString()))) {
+                File(root, sub.first).listFiles()?.filter { it.isFile }?.forEach { f ->
+                    sub.second.mkdirs()
+                    f.copyTo(File(sub.second, f.name), overwrite = true)
+                }
+            }
+            PieceMidi.notifyChanged()
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        } finally {
+            dir.deleteRecursively()
         }
     }
 
@@ -352,6 +464,7 @@ class LibraryRepository(
                         if (e.isDirectory) continue
                         val f = File(root, e.name).canonicalFile
                         if (!f.path.startsWith(root.path)) continue // ochrana pred „../“
+                        f.parentFile?.mkdirs() // v2: podpriečinky (refs/, recordings/, midi/)
                         f.outputStream().use { zip.copyTo(it) }
                     }
                 }
@@ -371,8 +484,33 @@ class LibraryRepository(
                 ),
             )
             File(root, "notes.json").takeIf { it.exists() }?.copyTo(File(context.filesDir, "annotations/$id.json"), overwrite = true)
-            root.listFiles()?.firstOrNull { it.name.startsWith("audio.") }?.let { a ->
-                PieceAudio(context).addFile(id, a, piece.title.take(60))
+            val audio = PieceAudio(context)
+            val refs = File(root, "refs").listFiles()?.filter { it.isFile }.orEmpty()
+            if (refs.isNotEmpty()) {
+                // v2: všetky referenčné nahrávky (oficiálna ostane oficiálna, ostatné s názvom)
+                refs.forEach { f ->
+                    if (f.nameWithoutExtension == "official") audio.setOfficial(id, f)
+                    else audio.addFile(id, f, f.nameWithoutExtension.substringAfter("__", f.nameWithoutExtension))
+                }
+            } else {
+                root.listFiles()?.firstOrNull { it.name.startsWith("audio.") }?.let { a ->
+                    audio.addFile(id, a, piece.title.take(60))
+                }
+            }
+            // vlastné nahrávky (mikrofón / klavír)
+            File(root, "recordings").listFiles()?.filter { it.isFile }?.forEach { f ->
+                val dir = File(File(context.filesDir, "recordings"), id.toString()).apply { mkdirs() }
+                f.copyTo(File(dir, f.name), overwrite = true)
+            }
+            // MIDI pre vizualizér (katalóg, importované, výber)
+            File(root, "midi").listFiles()?.filter { it.isFile }?.forEach { f ->
+                val dir = File(File(context.filesDir, PieceMidi.DIR), id.toString()).apply { mkdirs() }
+                f.copyTo(File(dir, f.name), overwrite = true)
+            }
+            PieceMidi.notifyChanged()
+            // záložky
+            File(root, "bookmarks.json").takeIf { it.exists() }?.let { f ->
+                runCatching { BookmarkStore(context).save(id, BookmarkStore.fromJson(f.readText())) }
             }
             Result.success(id)
         } catch (e: Throwable) {
@@ -390,6 +528,8 @@ class LibraryRepository(
         thumbFile(piece)?.delete()
         File(context.filesDir, "annotations/${piece.id}.json").delete()
         PieceAudio(context).deleteAll(piece.id)
+        BookmarkStore(context).delete(piece.id)
+        com.daklok.crescendo.widget.AppShortcuts.pieceDeleted(context, piece.id)
     }
 
     suspend fun rename(id: Long, title: String) = dao.rename(id, title)

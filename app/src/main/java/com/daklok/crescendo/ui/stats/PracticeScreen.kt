@@ -1,5 +1,13 @@
 package com.daklok.crescendo.ui.stats
 
+import com.daklok.crescendo.data.PracticeReminder
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
@@ -188,6 +196,8 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
     var editSession by remember { mutableStateOf<PracticeSessionEntity?>(null) }
     var addSession by remember { mutableStateOf(false) }
     var detailPiece by remember { mutableStateOf<Long?>(null) }
+    var reminderOn by remember { mutableStateOf(PracticeReminder.enabled(context)) }
+    var reminderOpen by remember { mutableStateOf(false) }
 
     val compact = isCompactWidth()
     Scaffold(
@@ -203,6 +213,15 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                     )
                 },
                 title = { Text(stringResource(R.string.practice), fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp)) },
+                actions = {
+                    TonalIconButton(
+                        icon = if (reminderOn) Icons.Outlined.NotificationsActive else Icons.Outlined.NotificationsNone,
+                        contentDescription = stringResource(R.string.reminder_title),
+                        highlighted = reminderOn,
+                        onClick = { reminderOpen = true },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -422,6 +441,18 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
             },
             onDelete = null,
             onDismiss = { addSession = false },
+        )
+    }
+    if (reminderOpen) {
+        ReminderDialog(
+            enabled = reminderOn,
+            minuteOfDay = PracticeReminder.minuteOfDay(context),
+            onSave = { on, minute ->
+                PracticeReminder.set(context, on, minute)
+                reminderOn = on
+                reminderOpen = false
+            },
+            onDismiss = { reminderOpen = false },
         )
     }
     detailPiece?.let { id ->
@@ -888,6 +919,67 @@ private fun StatCard(icon: ImageVector, label: String, value: String, modifier: 
 }
 
 /** Denný cieľ: posuvník 5–180 min a rýchle voľby. */
+/** Pripomienka cvičenia: zapnutie a čas (pýta si povolenie na notifikácie). */
+@Composable
+private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean, Int) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(enabled) }
+    val time = rememberTimePickerState(
+        initialHour = minuteOfDay / 60,
+        initialMinute = minuteOfDay % 60,
+        is24Hour = android.text.format.DateFormat.is24HourFormat(context),
+    )
+    var denied by remember { mutableStateOf(false) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) onSave(true, time.hour * 60 + time.minute) else denied = true
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
+        icon = { Icon(Icons.Outlined.NotificationsActive, null) },
+        title = { Text(stringResource(R.string.reminder_title)) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { on = !on }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.reminder_switch), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Switch(checked = on, onCheckedChange = { on = it })
+                }
+                Text(
+                    stringResource(R.string.reminder_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (on) TimeInput(state = time)
+                if (denied) {
+                    Text(
+                        stringResource(R.string.reminder_denied),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val minute = time.hour * 60 + time.minute
+                if (on && !PracticeReminder.canNotify(context) && android.os.Build.VERSION.SDK_INT >= 33) {
+                    permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    onSave(on, minute)
+                }
+            }) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
 @Composable
 private fun GoalDialog(current: Int, onSave: (Int) -> Unit, onDismiss: () -> Unit) {
     var value by remember { mutableFloatStateOf(current.toFloat()) }

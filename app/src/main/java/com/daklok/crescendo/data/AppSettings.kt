@@ -25,6 +25,10 @@ enum class LibrarySort(@StringRes val labelRes: Int) {
     RECENT(R.string.sort_recent),
     ADDED(R.string.sort_added),
     TITLE(R.string.sort_title),
+    COMPOSER(R.string.sort_composer),
+    DIFFICULTY(R.string.sort_difficulty),
+    PRACTICED(R.string.sort_practiced),
+    NEGLECTED(R.string.sort_neglected),
 }
 
 enum class ToolbarPosition(@StringRes val labelRes: Int) {

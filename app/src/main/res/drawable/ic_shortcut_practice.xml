@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- skratka: denník cvičenia -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#E3E6FF" android:pathData="M24,24m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+    <path android:fillColor="#3A4FA0" android:pathData="M24,12c-6.6,0 -12,5.4 -12,12s5.4,12 12,12s12,-5.4 12,-12S30.6,12 24,12zM24,33c-5,0 -9,-4 -9,-9s4,-9 9,-9s9,4 9,9S29,33 24,33zM25,18h-2v7l6,3.6l1,-1.6l-5,-3V18z" />
+</vector>

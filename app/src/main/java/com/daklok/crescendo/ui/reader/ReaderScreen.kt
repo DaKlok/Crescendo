@@ -67,6 +67,13 @@ import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.BookmarkAdded
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -82,6 +89,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,6 +106,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -243,6 +252,11 @@ private fun ReaderContent(
     }
     val ui by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { runCatching { keyFocus.requestFocus() } }
+    // skratky aplikácie (dlhé podržanie ikony) a widget – naposledy otvorená skladba
+    val openedPiece = ui.piece
+    LaunchedEffect(openedPiece?.id) {
+        openedPiece?.let { com.daklok.crescendo.widget.AppShortcuts.pieceOpened(context.applicationContext, it) }
+    }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val compact = isCompactWidth()
     // dvojstrana len na širokom displeji (tablet na šírku), na mobile by boli noty príliš malé
@@ -257,6 +271,18 @@ private fun ReaderContent(
     )
 
     var chromeVisible by remember { mutableStateOf(true) }
+
+    // záložky skladby (pomenované miesta – „Repríza“, „Coda“…)
+    val bookmarkStore = remember { com.daklok.crescendo.data.BookmarkStore(context.applicationContext) }
+    var bookmarks by remember(metronomePieceId) {
+        mutableStateOf(metronomePieceId?.let { bookmarkStore.list(it) }.orEmpty())
+    }
+    fun saveBookmarks(list: List<com.daklok.crescendo.data.Bookmark>) {
+        bookmarks = list.sortedBy { it.page }
+        metronomePieceId?.let { scope.launch(kotlinx.coroutines.Dispatchers.IO) { bookmarkStore.save(it, list) } }
+    }
+    var bookmarkAddPage by remember { mutableStateOf<Int?>(null) }
+    var bookmarkEdit by remember { mutableStateOf<com.daklok.crescendo.data.Bookmark?>(null) }
     var halfTurned by remember { mutableStateOf(false) }
 
     // priblíženie (štipnutím) – platí pre aktuálnu stranu, pri zmene strany sa resetuje
@@ -274,7 +300,8 @@ private fun ReaderContent(
     /** Režim hrania: nič neruší – bez líšt, bez systémových panelov, ťuk do stredu len ukáže malé „Ukončiť“. */
     var immersive by remember { mutableStateOf(false) }
     var stageHint by remember { mutableStateOf(false) }
-    LaunchedEffect(stageHint) {
+    var stageHintTick by remember { mutableIntStateOf(0) } // dotyk tlačidla predĺži zobrazenie
+    LaunchedEffect(stageHint, stageHintTick) {
         if (stageHint) {
             kotlinx.coroutines.delay(3500)
             stageHint = false
@@ -403,8 +430,32 @@ private fun ReaderContent(
         }
     }
 
+    // v režime hrania gesto späť nič neukončí – len ukáže tlačidlo (podržaním sa režim ukončí)
     BackHandler {
-        if (immersive) enterStage(false) else onBack()
+        if (immersive) stageHint = true else onBack()
+    }
+
+    // režim hrania: stíšiť upozornenia (Nerušiť – povolia sa len budíky), ak to používateľ povolil
+    val notificationManager = remember { context.getSystemService(android.app.NotificationManager::class.java) }
+    var dndAllowed by remember { mutableStateOf(notificationManager?.isNotificationPolicyAccessGranted == true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        dndAllowed = notificationManager?.isNotificationPolicyAccessGranted == true
+        onPauseOrDispose { }
+    }
+    DisposableEffect(immersive, dndAllowed) {
+        val nm = notificationManager
+        var previous: Int? = null
+        if (immersive && dndAllowed && nm != null) {
+            runCatching {
+                previous = nm.currentInterruptionFilter
+                if (previous == android.app.NotificationManager.INTERRUPTION_FILTER_ALL) {
+                    nm.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALARMS)
+                } else {
+                    previous = null // Nerušiť už je zapnuté – nemeníme a ani nevraciame
+                }
+            }
+        }
+        onDispose { previous?.let { p -> runCatching { nm?.setInterruptionFilter(p) } } }
     }
 
     val trackingActive = settings.headTrackingEnabled && cameraPermission
@@ -446,18 +497,22 @@ private fun ReaderContent(
         Box(
             Modifier
                 .fillMaxSize()
-                .zoomPanGestures(
-                    zoom = { zoom },
-                    pan = { pan },
-                    // prst posúva priblížený obsah, len ak ním práve nekreslíš
-                    // pri kreslení prstom jeden prst kreslí, posúva sa dvoma prstami
-                    singleFingerPan = { !(vm.annotations.enabled && settings.fingerDrawing) },
-                    onChange = { z, p -> zoom = z; pan = p },
+                .then(
+                    // v režime hrania sa nič nepribližuje ani neposúva omylom
+                    if (immersive) Modifier else Modifier.zoomPanGestures(
+                        zoom = { zoom },
+                        pan = { pan },
+                        // prst posúva priblížený obsah, len ak ním práve nekreslíš
+                        // pri kreslení prstom jeden prst kreslí, posúva sa dvoma prstami
+                        singleFingerPan = { !(vm.annotations.enabled && settings.fingerDrawing) },
+                        onChange = { z, p -> zoom = z; pan = p },
+                    ),
                 ),
         ) {
         HorizontalPager(
             state = pager,
-            userScrollEnabled = zoom <= 1.01f,
+            // v režime hrania strany neotočí náhodné potiahnutie – len pedál, hlava, klávesy alebo ťuk na okraj
+            userScrollEnabled = zoom <= 1.01f && !immersive,
             modifier = Modifier
                 .fillMaxSize()
                 // ťuk: ľavá/pravá tretina otočí stranu, stred zobrazí/skryje ovládanie
@@ -792,6 +847,9 @@ private fun ReaderContent(
                         }
                     }
                     Spacer(Modifier.width(12.dp))
+                    // záložky ako zvislé čiary priamo v dráhe posuvníka
+                    val sliderInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    val markColor = MaterialTheme.colorScheme.tertiary
                     Slider(
                         value = pager.currentPage.toFloat(),
                         onValueChange = {
@@ -802,6 +860,30 @@ private fun ReaderContent(
                             }
                         },
                         valueRange = 0f..(screenCount - 1).coerceAtLeast(1).toFloat(),
+                        interactionSource = sliderInteraction,
+                        thumb = { androidx.compose.material3.SliderDefaults.Thumb(interactionSource = sliderInteraction) },
+                        track = { sliderState ->
+                            Box(contentAlignment = Alignment.Center) {
+                                androidx.compose.material3.SliderDefaults.Track(sliderState = sliderState)
+                                if (bookmarks.isNotEmpty()) {
+                                    androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                                        val max = (screenCount - 1).coerceAtLeast(1)
+                                        val w = 3.dp.toPx()
+                                        bookmarks.forEach { b ->
+                                            val f = (b.page / perScreen).coerceAtMost(max).toFloat() / max
+                                            val x = (w / 2 + (size.width - w) * f)
+                                            drawLine(
+                                                markColor,
+                                                Offset(x, 0f),
+                                                Offset(x, size.height),
+                                                strokeWidth = w,
+                                                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                     )
                     Text(
@@ -810,6 +892,73 @@ private fun ReaderContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 12.dp),
                     )
+                    // záložky: zoznam, skok, pridanie na aktuálnu stranu
+                    Box {
+                        var open by remember { mutableStateOf(false) }
+                        val firstIdx = pager.currentPage * perScreen
+                        val here = bookmarks.any { it.page in firstIdx until firstIdx + perScreen }
+                        IconButton(onClick = { open = true }) {
+                            Icon(
+                                if (here) Icons.Outlined.BookmarkAdded else Icons.Outlined.BookmarkBorder,
+                                stringResource(R.string.bookmarks),
+                                tint = if (here) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = open,
+                            onDismissRequest = { open = false },
+                            shape = RoundedCornerShape(20.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.bookmarks),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                            if (bookmarks.isEmpty()) {
+                                Text(
+                                    stringResource(R.string.bookmarks_empty),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                                        .widthIn(max = 260.dp),
+                                )
+                            }
+                            bookmarks.forEach { b ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(b.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                            Text(
+                                                stringResource(R.string.bookmark_page, b.page + 1),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    leadingIcon = { Icon(Icons.Outlined.Bookmark, null, tint = MaterialTheme.colorScheme.tertiary) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { open = false; bookmarkEdit = b }) {
+                                            Icon(Icons.Outlined.Edit, stringResource(R.string.edit))
+                                        }
+                                    },
+                                    onClick = {
+                                        open = false
+                                        halfTurned = false
+                                        scope.launch { pager.animateScrollToPage((b.page / perScreen).coerceIn(0, screenCount - 1)) }
+                                    },
+                                )
+                            }
+                            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(stringResource(R.string.bookmark_add_here, firstIdx + 1)) },
+                                leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, null) },
+                                onClick = { open = false; bookmarkAddPage = firstIdx },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -881,11 +1030,40 @@ private fun ReaderContent(
         if (exportOpen && exportPiece != null) {
             ExportPdfDialog(
                 request = ExportRequest(
-                    title = exportPiece.title,
+                    piece = exportPiece,
                     pdf = vm.pdfFile(exportPiece),
                     notes = { vm.annotations.snapshot() },
                 ),
                 onDismiss = { exportOpen = false },
+            )
+        }
+
+        // záložky – pridanie / úprava
+        bookmarkAddPage?.let { page ->
+            BookmarkDialog(
+                initialName = "",
+                page = page,
+                onSave = { name ->
+                    saveBookmarks(bookmarks + com.daklok.crescendo.data.Bookmark(page, name))
+                    bookmarkAddPage = null
+                },
+                onDelete = null,
+                onDismiss = { bookmarkAddPage = null },
+            )
+        }
+        bookmarkEdit?.let { b ->
+            BookmarkDialog(
+                initialName = b.name,
+                page = b.page,
+                onSave = { name ->
+                    saveBookmarks(bookmarks.map { if (it == b) it.copy(name = name) else it })
+                    bookmarkEdit = null
+                },
+                onDelete = {
+                    saveBookmarks(bookmarks - b)
+                    bookmarkEdit = null
+                },
+                onDismiss = { bookmarkEdit = null },
             )
         }
 
@@ -921,17 +1099,33 @@ private fun ReaderContent(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                 ) {
-                    Text(stringResource(R.string.stage_mode_hint), style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.width(8.dp))
-                    androidx.compose.material3.TextButton(
-                        onClick = { enterStage(false) },
-                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.inversePrimary,
-                        ),
-                    ) {
-                        Icon(Icons.Outlined.FullscreenExit, null, Modifier.padding(end = 6.dp))
-                        Text(stringResource(R.string.stage_mode_exit))
+                    Column {
+                        Text(stringResource(R.string.stage_mode_hint), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            stringResource(if (dndAllowed) R.string.stage_mode_dnd_on else R.string.stage_mode_locked),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f),
+                        )
                     }
+                    Spacer(Modifier.width(8.dp))
+                    if (!dndAllowed && notificationManager != null) {
+                        // povolenie stíšiť upozornenia (otvorí systémové nastavenia)
+                        IconButton(onClick = {
+                            runCatching {
+                                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                            }
+                        }) {
+                            Icon(Icons.Outlined.NotificationsOff, stringResource(R.string.stage_mode_dnd_allow), tint = MaterialTheme.colorScheme.inversePrimary)
+                        }
+                    }
+                    HoldToExitButton(
+                        label = stringResource(R.string.stage_mode_hold_exit),
+                        onExit = { enterStage(false) },
+                        onPress = {
+                            stageHint = true
+                            stageHintTick++
+                        },
+                    )
                 }
             }
         }
@@ -1268,5 +1462,114 @@ private fun DisplayToggles(
         leadingIcon = { Icon(Icons.Outlined.VerticalSplit, null) },
         trailingIcon = { androidx.compose.material3.Switch(checked = settings.halfPageTurn, onCheckedChange = null) },
         onClick = { update { it.copy(halfPageTurn = !it.halfPageTurn) } },
+    )
+}
+
+/**
+ * Ukončenie režimu hrania podržaním (~0,8 s) – krúžok ukazuje priebeh; náhodný dotyk nič neukončí.
+ */
+@Composable
+private fun HoldToExitButton(label: String, onExit: () -> Unit, onPress: () -> Unit) {
+    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val accent = MaterialTheme.colorScheme.inversePrimary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        onPress()
+                        val job = scope.launch {
+                            progress.snapTo(0f)
+                            progress.animateTo(1f, tween(800, easing = androidx.compose.animation.core.LinearEasing))
+                            onExit()
+                        }
+                        tryAwaitRelease()
+                        if (progress.value < 1f) {
+                            job.cancel()
+                            scope.launch { progress.animateTo(0f, tween(150)) }
+                        }
+                    },
+                )
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.CircularProgressIndicator(
+                progress = { progress.value },
+                modifier = Modifier.size(22.dp),
+                color = accent,
+                strokeWidth = 2.5.dp,
+                trackColor = accent.copy(alpha = 0.25f),
+            )
+            Icon(Icons.Outlined.FullscreenExit, null, Modifier.size(12.dp), tint = accent)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = accent)
+    }
+}
+
+/** Pridanie / premenovanie záložky – s rýchlymi návrhmi názvov. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun BookmarkDialog(
+    initialName: String,
+    page: Int,
+    onSave: (String) -> Unit,
+    onDelete: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(initialName) }
+    val suggestions = listOf(
+        R.string.bm_start, R.string.bm_repeat, R.string.bm_coda, R.string.bm_trio,
+        R.string.bm_chorus, R.string.bm_verse, R.string.bm_hard,
+    ).map { stringResource(it) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
+        icon = { Icon(Icons.Outlined.Bookmark, null) },
+        title = { Text(stringResource(R.string.bookmark_title, page + 1)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(60) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.bookmark_name)) },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    suggestions.forEach { sug ->
+                        androidx.compose.material3.SuggestionChip(
+                            onClick = { name = sug },
+                            label = { Text(sug) },
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                    }
+                }
+                if (onDelete != null) {
+                    androidx.compose.material3.TextButton(
+                        onClick = onDelete,
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.delete))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onSave(name.trim().ifBlank { suggestions.first() }) },
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

@@ -39,6 +39,9 @@ interface PracticeDao {
     @Query("DELETE FROM practice_sessions WHERE id = :id")
     suspend fun delete(id: Long)
 
+    @Query("SELECT * FROM practice_sessions WHERE startedAt >= :since")
+    suspend fun since(since: Long): List<PracticeSessionEntity>
+
     @Query("SELECT * FROM practice_sessions ORDER BY startedAt DESC")
     fun observeAll(): kotlinx.coroutines.flow.Flow<List<PracticeSessionEntity>>
 

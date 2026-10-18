@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -36,6 +37,8 @@ data class LibraryUiState(
     val path: List<FolderEntity> = emptyList(),
     val totalCount: Int = 0,
     val continueReading: PieceEntity? = null,
+    /** Ďalšie naposledy otvorené skladby (pás pod „Pokračovať“). */
+    val recent: List<PieceEntity> = emptyList(),
     val query: String = "",
     val favoritesOnly: Boolean = false,
     /** Všetky štítky v knižnici a vybraný štítok (filter). */
@@ -111,12 +114,17 @@ class LibraryViewModel(
         Filters(q, f, i, folder, tag)
     }
 
+    /** Kedy sa ktorá skladba naposledy cvičila (z denníka) – na zoradenie. */
+    private val lastPracticed = (app as CrescendoApp).practice.observeAll()
+        .map { list -> list.groupBy { it.pieceId }.mapValues { (_, l) -> l.maxOf { it.startedAt + it.durationSec * 1000L } } }
+
     val state: StateFlow<LibraryUiState> = combine(
         library.observePieces(),
         library.observeFolders(),
         settingsRepo.settings,
         filters,
-    ) { all, folders, settings, f ->
+        lastPracticed,
+    ) { all, folders, settings, f, practiced ->
         val byId = folders.associateBy { it.id }
         // ak bol aktuálny priečinok zmazaný, vrátime sa do knižnice
         val current = f.folderId?.let { byId[it] }
@@ -139,6 +147,20 @@ class LibraryViewModel(
             LibrarySort.RECENT -> filtered.sortedByDescending { maxOf(it.lastOpenedAt, it.addedAt) }
             LibrarySort.ADDED -> filtered.sortedByDescending { it.addedAt }
             LibrarySort.TITLE -> filtered.sortedBy { it.title.lowercase() }
+            // skladateľ (bez skladateľa na koniec), v rámci neho názov
+            LibrarySort.COMPOSER -> filtered.sortedWith(
+                compareBy<PieceEntity>({ it.composer.isBlank() }, { it.composer.lowercase() }, { it.title.lowercase() }),
+            )
+            // od najľahšej (neuvedená obtiažnosť na koniec)
+            LibrarySort.DIFFICULTY -> filtered.sortedWith(
+                compareBy<PieceEntity>({ it.difficulty == 0 }, { it.difficulty }, { it.title.lowercase() }),
+            )
+            // naposledy cvičené (podľa denníka)
+            LibrarySort.PRACTICED -> filtered.sortedByDescending { practiced[it.id] ?: 0L }
+            // dlho necvičené: najprv tie, ktoré sa cvičili najdávnejšie; nikdy necvičené na koniec
+            LibrarySort.NEGLECTED -> filtered.sortedWith(
+                compareBy<PieceEntity>({ practiced[it.id] == null }, { practiced[it.id] ?: Long.MAX_VALUE }),
+            )
         }
 
         val counts = HashMap<Long, Int>()
@@ -165,6 +187,9 @@ class LibraryViewModel(
             continueReading = if (current == null) {
                 all.filter { it.lastOpenedAt > 0 }.maxByOrNull { it.lastOpenedAt }
             } else null,
+            recent = if (current == null) {
+                all.filter { it.lastOpenedAt > 0 }.sortedByDescending { it.lastOpenedAt }.drop(1).take(8)
+            } else emptyList(),
             query = f.query,
             favoritesOnly = f.favoritesOnly,
             allTags = all.flatMap { it.tagList }.distinct().sortedBy { it.lowercase() },
@@ -354,29 +379,6 @@ class LibraryViewModel(
                 .onSuccess { n -> say(app.getString(R.string.msg_split_done, n)) }
                 .onFailure { say(app.getString(R.string.msg_pages_failed), error = true) }
             importing.update { it - 1 }
-        }
-    }
-
-    /** Zbalí skladbu s poznámkami a otvorí zdieľanie. */
-    fun sharePiece(piece: PieceEntity) {
-        viewModelScope.launch {
-            val ok = runCatching {
-                val dir = java.io.File(app.cacheDir, "exports").apply { mkdirs() }
-                val safe = com.daklok.crescendo.pdf.PdfExporter.safeFileName(piece.title)
-                val file = java.io.File(dir, "$safe.crescendo")
-                library.exportPackage(piece, file)
-                val uri = androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.files", file)
-                val send = android.content.Intent(android.content.Intent.ACTION_SEND)
-                    .setType("application/zip")
-                    .putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    .putExtra(android.content.Intent.EXTRA_SUBJECT, piece.title)
-                    .putExtra(android.content.Intent.EXTRA_TEXT, app.getString(R.string.share_piece_text, piece.title))
-                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                app.startActivity(
-                    android.content.Intent.createChooser(send, piece.title).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }.isSuccess
-            if (!ok) say(app.getString(R.string.export_failed), error = true)
         }
     }
 

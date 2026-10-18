@@ -73,12 +73,15 @@ private sealed interface Route {
     data object Setlists : Route
     data object Practice : Route
     data object Catalog : Route
+    data object Shared : Route
 }
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var libraryVm: LibraryViewModel
     private var pendingOpen = mutableStateOf<Long?>(null)
+    /** Widget / skratka: otvoriť denník cvičenia. */
+    private var pendingPractice = mutableStateOf(false)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
@@ -122,7 +125,13 @@ class MainActivity : ComponentActivity() {
             CrescendoTheme(mode = settings.themeMode, dynamicColor = settings.useDynamicColor) {
                 CompositionLocalProvider(LocalHapticsEnabled provides settings.haptics) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        CrescendoNav(app = app, libraryVm = libraryVm, openRequest = pendingOpen.value) {
+                        CrescendoNav(
+                            app = app,
+                            libraryVm = libraryVm,
+                            openRequest = pendingOpen.value,
+                            practiceRequest = pendingPractice.value,
+                            onPracticeHandled = { pendingPractice.value = false },
+                        ) {
                             pendingOpen.value = null
                         }
                         // úvodný sprievodca (len pri prvom spustení; čakáme na skutočné nastavenia, nech nebliká)
@@ -154,6 +163,8 @@ class MainActivity : ComponentActivity() {
         // synchronizácia: nahrať zmeny, keď bude internet
         val app = application as CrescendoApp
         if (!isChangingConfigurations) app.appScope.launch { runCatching { SyncManager.scheduleUploadIfChanged(app) } }
+        // widget na domovskej obrazovke: dnešné cvičenie a posledná skladba
+        com.daklok.crescendo.widget.PracticeWidget.update(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -163,6 +174,18 @@ class MainActivity : ComponentActivity() {
 
     /** PDF otvorené z iných aplikácií sa naimportuje do knižnice a hneď otvorí. */
     private fun handleIntent(intent: Intent?) {
+        // widget / skratka aplikácie
+        when (intent?.action) {
+            com.daklok.crescendo.widget.PracticeWidget.ACTION_OPEN_PIECE -> {
+                val id = intent.getLongExtra(com.daklok.crescendo.widget.PracticeWidget.EXTRA_PIECE_ID, -1L)
+                if (id > 0) pendingOpen.value = id
+                return
+            }
+            com.daklok.crescendo.widget.PracticeWidget.ACTION_OPEN_PRACTICE -> {
+                pendingPractice.value = true
+                return
+            }
+        }
         val uri: Uri = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data ?: return
         libraryVm.importPdfs(listOf(uri)) { id -> pendingOpen.value = id }
     }
@@ -173,11 +196,19 @@ private fun CrescendoNav(
     app: CrescendoApp,
     libraryVm: LibraryViewModel,
     openRequest: Long?,
+    practiceRequest: Boolean = false,
+    onPracticeHandled: () -> Unit = {},
     onOpenRequestHandled: () -> Unit,
 ) {
     var route by remember { mutableStateOf<Route>(Route.Library) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(practiceRequest) {
+        if (practiceRequest) {
+            route = Route.Practice
+            onPracticeHandled()
+        }
+    }
     LaunchedEffect(openRequest) {
         if (openRequest != null) {
             route = Route.Reader(openRequest)
@@ -196,7 +227,7 @@ private fun CrescendoNav(
                 (fadeIn(tween(260)) + slideInHorizontally(Motion.gentle()) { dir * it / 3 }) togetherWith
                     (fadeOut(tween(200)) + slideOutHorizontally(tween(260)) { -dir * it / 4 })
             } else if (targetState is Route.Reader ||
-                (targetState is Route.Setlists || targetState is Route.Practice || targetState is Route.Catalog) &&
+                (targetState is Route.Setlists || targetState is Route.Practice || targetState is Route.Catalog || targetState is Route.Shared) &&
                     initialState is Route.Library
             ) {
                 // otvorenie skladby: čítačka pružne „vyrastie“, knižnica ustúpi do pozadia
@@ -218,6 +249,11 @@ private fun CrescendoNav(
                 onOpenSetlists = { route = Route.Setlists },
                 onOpenPractice = { route = Route.Practice },
                 onOpenCatalog = { route = Route.Catalog },
+                onOpenShared = { route = Route.Shared },
+            )
+            Route.Shared -> com.daklok.crescendo.ui.share.SharedScreen(
+                onBack = { route = Route.Library },
+                onOpenPiece = { route = Route.Reader(it) },
             )
             Route.Catalog -> CatalogScreen(
                 onBack = { route = Route.Library },

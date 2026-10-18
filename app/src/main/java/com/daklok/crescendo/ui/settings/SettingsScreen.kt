@@ -7,6 +7,7 @@ import com.daklok.crescendo.ui.common.AUTHOR_AVATAR_URL
 import com.daklok.crescendo.ui.common.RemoteAvatar
 import com.daklok.crescendo.ui.common.IconBadge
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.foundation.layout.fillMaxSize
@@ -394,6 +395,7 @@ fun SettingsSheet(
                             SectionHeader(Icons.Outlined.FolderZip, stringResource(R.string.backup_file))
                             LocalBackupSection(backup = backup)
                         }
+                        SettingsPage.STORAGE -> StorageSettingsContent()
                         SettingsPage.ABOUT -> {
                             // ── Podpora ──
                             SectionHeader(Icons.Outlined.FavoriteBorder, stringResource(R.string.support))
@@ -419,6 +421,7 @@ internal enum class SettingsPage(@androidx.annotation.StringRes val titleRes: In
     HEAD(R.string.head_tracking, Icons.Outlined.Face),
     PEDALS(R.string.pedals, Icons.Outlined.Piano),
     BACKUP(R.string.backup_title, Icons.Outlined.CloudUpload),
+    STORAGE(R.string.storage_title, Icons.Outlined.Storage),
     ABOUT(R.string.about_support, Icons.Outlined.Info),
 }
 
@@ -479,6 +482,18 @@ private fun SettingsHome(settings: AppSettings, onOpen: (SettingsPage) -> Unit) 
         }
         SettingsCard {
             CategoryRow(SettingsPage.BACKUP, backupSummary, onOpen)
+            Divider()
+            // celková veľkosť dát aplikácie (zistí sa na pozadí)
+            val storageTotal by androidx.compose.runtime.produceState<Long?>(null) {
+                value = runCatching {
+                    com.daklok.crescendo.data.StorageManager(context.applicationContext).scan().sumOf { it.bytes }
+                }.getOrNull()
+            }
+            CategoryRow(
+                SettingsPage.STORAGE,
+                storageTotal?.let { stringResource(R.string.storage_summary, formatBytes(it)) } ?: stringResource(R.string.storage_summary_loading),
+                onOpen,
+            )
             Divider()
             CategoryRow(SettingsPage.ABOUT, stringResource(R.string.version_line, version), onOpen)
         }

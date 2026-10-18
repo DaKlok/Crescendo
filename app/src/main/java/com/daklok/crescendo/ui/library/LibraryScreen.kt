@@ -4,6 +4,7 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material3.FilledTonalButton
@@ -139,6 +140,7 @@ fun LibraryScreen(
     onOpenSetlists: () -> Unit = {},
     onOpenPractice: () -> Unit = {},
     onOpenCatalog: () -> Unit = {},
+    onOpenShared: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val haptic = rememberHaptic()
@@ -315,6 +317,11 @@ fun LibraryScreen(
                                             onClick = { compactMenuOpen = false; onOpenPractice() },
                                         )
                                         DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.sh_title)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Groups, null) },
+                                            onClick = { compactMenuOpen = false; onOpenShared() },
+                                        )
+                                        DropdownMenuItem(
                                             text = { Text(stringResource(R.string.new_folder)) },
                                             leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
                                             onClick = { compactMenuOpen = false; newFolderOpen = true },
@@ -376,6 +383,12 @@ fun LibraryScreen(
                                     icon = Icons.AutoMirrored.Outlined.QueueMusic,
                                     contentDescription = stringResource(R.string.setlists),
                                     onClick = onOpenSetlists,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TonalIconButton(
+                                    icon = Icons.Outlined.Groups,
+                                    contentDescription = stringResource(R.string.sh_title),
+                                    onClick = onOpenShared,
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 TonalIconButton(
@@ -532,7 +545,7 @@ fun LibraryScreen(
                             onSplit = { piece -> splitting = piece },
                             onExport = { piece ->
                                 exporting = ExportRequest(
-                                    title = piece.title,
+                                    piece = piece,
                                     pdf = vm.pdfFile(piece),
                                     notes = { vm.loadAnnotations(piece.id) },
                                 )
@@ -854,6 +867,20 @@ private fun LibraryGrid(
                     modifier = Modifier.animateItem(),
                 )
             }
+            // ďalšie naposledy otvorené skladby – rýchly návrat jedným ťuknutím
+            if (s.recent.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "recent") {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        modifier = Modifier.animateItem(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(s.recent.size, key = { s.recent[it].id }) { i ->
+                            val p = s.recent[i]
+                            RecentChip(piece = p, thumb = vm.thumbFile(p), onOpen = { onOpenPiece(p.id) })
+                        }
+                    }
+                }
+            }
         }
 
         if (s.totalCount > 0) {
@@ -981,7 +1008,6 @@ private fun LibraryGrid(
                     onEditDetails = { onEditDetails(piece) },
                     onEditPages = { onEditPages(piece) },
                     onSplit = { onSplit(piece) },
-                    onShare = { vm.sharePiece(piece) },
                     modifier = Modifier.animateItem(),
                     selectionMode = selection.active,
                     selected = piece.id in selection.pieces,

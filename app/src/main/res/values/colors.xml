@@ -4,4 +4,9 @@
     <color name="ic_background_dark">#121316</color>
     <color name="ic_launcher_bg">#212681</color>
     <color name="ic_launcher_fg">#FFFFFF</color>
+
+    <!-- widget na domovskej obrazovke -->
+    <color name="widget_bg">#FFF1EDF6</color>
+    <!-- odozva tlačidla „pokračovať“ (svetlé na tmavom tlačidle) -->
+    <color name="widget_ripple">#40FFFFFF</color>
 </resources>
