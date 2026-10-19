@@ -1,10 +1,9 @@
 package com.daklok.crescendo.ui.reader
 
-import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.material3.Switch
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +61,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Highlight
 import androidx.compose.material.icons.outlined.HighlightAlt
 import androidx.compose.material.icons.outlined.HorizontalRule
-import androidx.compose.material.icons.outlined.OpenWith
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.AlertDialog
@@ -122,7 +120,8 @@ fun AnnotationToolbar(
 
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
+        // pilulka ako ostatné lišty čítačky
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
         tonalElevation = 3.dp,
         shadowElevation = 8.dp,
@@ -287,11 +286,11 @@ private fun MoreButton(
     var open by remember { mutableStateOf(false) }
     Box {
         SmallIconButton(Icons.Outlined.MoreHoriz, stringResource(R.string.more)) { open = true }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp)) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(20.dp)) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.draw_with_finger)) },
                 leadingIcon = { Icon(Icons.Outlined.TouchApp, null) },
-                trailingIcon = { Switch(checked = fingerDrawing, onCheckedChange = null) },
+                trailingIcon = { com.daklok.crescendo.ui.common.ExpressiveSwitch(checked = fingerDrawing, onCheckedChange = null) },
                 onClick = { onFingerDrawingChange(!fingerDrawing) },
             )
             DropdownMenuItem(
@@ -342,12 +341,15 @@ private fun ToolToggle(
     locked: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // vybraný nástroj: z kruhu zaoblený štvorec (Material 3 Expressive)
+    val corner by animateIntAsState(if (selected) 30 else 50, Motion.bouncy(), label = "toolToggleShape")
     // hviezdička Pro je mimo tlačidla (tlačidlo orezáva obsah na kruh), ale v rámci 40 dp
     Box(Modifier.size(40.dp)) {
         FilledIconToggleButton(
             checked = selected,
             onCheckedChange = { onClick() },
             modifier = Modifier.size(40.dp),
+            shape = RoundedCornerShape(percent = corner),
             colors = IconButtonDefaults.filledIconToggleButtonColors(
                 containerColor = Color.Transparent,
                 checkedContainerColor = MaterialTheme.colorScheme.primary,

@@ -1,5 +1,16 @@
 package com.daklok.crescendo.ui.pro
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.ripple
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.decoShape
+import androidx.compose.ui.unit.DpOffset
+import com.daklok.crescendo.ui.common.Motion
+import com.daklok.crescendo.ui.common.pressScale
+import com.daklok.crescendo.ui.common.rememberHaptic
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -37,7 +48,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -130,6 +140,7 @@ private fun ProSheet(feature: ProFeature, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheet,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
@@ -247,7 +258,7 @@ private fun ProSheet(feature: ProFeature, onDismiss: () -> Unit) {
                 Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.pro_debug), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp))
-                    Switch(checked = debug, onCheckedChange = { debug = it; pro.debugPro = it })
+                    com.daklok.crescendo.ui.common.ExpressiveSwitch(checked = debug, onCheckedChange = { debug = it; pro.debugPro = it })
                 }
             }
         }
@@ -261,22 +272,30 @@ private fun Hero(isPro: Boolean, feature: ProFeature, modifier: Modifier) {
         modifier
             .clip(RoundedCornerShape(32.dp))
             .background(proBrush())
+            // jemné výrazné tvary v pozadí (veľký vlnitý kruh a štvorlístok)
+            .decoShape(
+                shape = ExpressiveShapes.Cookie12,
+                color = Color.White.copy(alpha = 0.08f),
+                diameter = 210.dp,
+                alignment = Alignment.TopEnd,
+                offset = DpOffset(70.dp, (-60).dp),
+                turn = { 14f },
+            )
+            .decoShape(
+                shape = ExpressiveShapes.Clover,
+                color = Color.White.copy(alpha = 0.06f),
+                diameter = 110.dp,
+                alignment = Alignment.BottomEnd,
+                offset = DpOffset(24.dp, 40.dp),
+                turn = { -10f },
+            )
             .padding(horizontal = 24.dp, vertical = 28.dp),
     ) {
-        // jemné kruhy v pozadí (výrazný, ale tichý detail)
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 0.dp)
-                .size(140.dp)
-                .scale(1.4f)
-                .background(Color.White.copy(alpha = 0.08f), CircleShape),
-        )
         Column(horizontalAlignment = Alignment.Start) {
             Box(
                 Modifier
-                    .size(56.dp)
-                    .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(18.dp)),
+                    .size(60.dp)
+                    .background(Color.White.copy(alpha = 0.22f), ExpressiveShapes.Cookie12),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Star, null, tint = Color.White, modifier = Modifier.size(32.dp))
@@ -356,10 +375,10 @@ private fun Cell(text: Int?, isPro: Boolean, modifier: Modifier) {
         when {
             text == -1 || (text == null && isPro) -> Box(
                 Modifier
-                    .size(24.dp)
+                    .size(26.dp)
                     .background(
                         if (isPro) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                        CircleShape,
+                        if (isPro) ExpressiveShapes.Cookie else CircleShape,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -380,54 +399,78 @@ private fun Cell(text: Int?, isPro: Boolean, modifier: Modifier) {
     }
 }
 
+/** Plán: vybraný má výraznejší rám, väčšie zaoblenie a fajku vo vlnitom kruhu. */
 @Composable
 private fun PlanCard(offer: ProOffer, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     val border by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        if (selected) scheme.primary else scheme.outlineVariant,
         label = "planBorder",
     )
     val scale by animateFloatAsState(if (selected) 1f else 0.98f, label = "planScale")
+    val corner by animateDpAsState(if (selected) 32.dp else 24.dp, Motion.bouncy(), label = "planCorner")
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(corner),
+        color = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
         border = BorderStroke(if (selected) 2.dp else 1.dp, border),
         modifier = modifier.scale(scale),
     ) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp).heightIn(min = 64.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp).heightIn(min = 64.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(
+                            when (offer.plan) {
+                                ProPlan.MONTHLY -> R.string.pro_plan_monthly
+                                ProPlan.YEARLY -> R.string.pro_plan_yearly
+                                ProPlan.LIFETIME -> R.string.pro_plan_lifetime
+                            },
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (offer.plan == ProPlan.YEARLY) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.background(proBrush(), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                            Text(stringResource(R.string.pro_best), style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    // miesto pre fajku vpravo hore
+                    Spacer(Modifier.width(28.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(offer.price, style = MaterialTheme.typography.headlineSmall)
                 Text(
                     stringResource(
                         when (offer.plan) {
-                            ProPlan.MONTHLY -> R.string.pro_plan_monthly
-                            ProPlan.YEARLY -> R.string.pro_plan_yearly
-                            ProPlan.LIFETIME -> R.string.pro_plan_lifetime
+                            ProPlan.MONTHLY -> R.string.pro_plan_monthly_desc
+                            ProPlan.YEARLY -> R.string.pro_plan_yearly_desc
+                            ProPlan.LIFETIME -> R.string.pro_plan_lifetime_desc
                         },
                     ),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
                 )
-                if (offer.plan == ProPlan.YEARLY) {
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.background(proBrush(), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                        Text(stringResource(R.string.pro_best), style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = selected,
+                enter = androidx.compose.animation.scaleIn(Motion.bouncy()) + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(26.dp)
+                        .background(scheme.primary, ExpressiveShapes.Cookie),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Check, null, tint = scheme.onPrimary, modifier = Modifier.size(16.dp))
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Text(offer.price, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-            Text(
-                stringResource(
-                    when (offer.plan) {
-                        ProPlan.MONTHLY -> R.string.pro_plan_monthly_desc
-                        ProPlan.YEARLY -> R.string.pro_plan_yearly_desc
-                        ProPlan.LIFETIME -> R.string.pro_plan_lifetime_desc
-                    },
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -435,12 +478,18 @@ private fun PlanCard(offer: ProOffer, selected: Boolean, modifier: Modifier, onC
 /** Hlavné tlačidlo nákupu vo farbách Pro. */
 @Composable
 private fun GradientButton(text: String, modifier: Modifier, onClick: () -> Unit) {
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier
-            .height(58.dp)
+            .height(60.dp)
+            .pressScale(interaction, 0.97f)
             .clip(RoundedCornerShape(50))
             .background(proBrush())
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = interaction, indication = ripple(color = Color.White)) {
+                haptic(HapticFeedbackType.LongPress)
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)

@@ -31,6 +31,9 @@ enum class LibrarySort(@StringRes val labelRes: Int) {
     NEGLECTED(R.string.sort_neglected),
 }
 
+/** Ako sa ukazujú skladby v knižnici: mriežka listov alebo zoznam (list nôt vľavo, texty vpravo). */
+enum class LibraryLayout { GRID, LIST }
+
 enum class ToolbarPosition(@StringRes val labelRes: Int) {
     LEFT(R.string.pos_left),
     RIGHT(R.string.pos_right),
@@ -47,6 +50,10 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.PAPER,
     val useDynamicColor: Boolean = false,
     val sort: LibrarySort = LibrarySort.RECENT,
+    /** Zobrazenie skladieb v knižnici. */
+    val libraryLayout: LibraryLayout = LibraryLayout.GRID,
+    /** Počet skladieb v riadku mriežky; 0 = automaticky podľa šírky obrazovky. */
+    val libraryColumns: Int = 0,
 
     // Ovládanie otáčania strán hlavou
     val headTrackingEnabled: Boolean = false,
@@ -86,6 +93,14 @@ data class AppSettings(
     val cropMargins: Boolean = false,
     /** Nočný režim nôt (invertované farby). */
     val nightMode: Boolean = false,
+    /** Strany pod sebou (plynulé posúvanie nahor) namiesto listovania. */
+    val continuousScroll: Boolean = false,
+    /** Šírka strán pri posúvaní (podiel šírky obrazovky, mení sa štipnutím). */
+    val scrollWidth: Float = 1f,
+    /** Cvičebné úseky sú vidieť priamo v notách. */
+    val showSpots: Boolean = true,
+    /** Pri importe prečítať prvú stranu a doplniť názov a skladateľa. */
+    val recognizeTitles: Boolean = true,
 
     // Poznámky
     /** Kreslenie prstom (ak nemáš stylus). So stylusom sa kreslí vždy. */
@@ -133,6 +148,8 @@ class SettingsRepository(private val context: Context) {
         val theme = stringPreferencesKey("theme")
         val dynamic = booleanPreferencesKey("dynamic")
         val sort = stringPreferencesKey("sort")
+        val libLayout = stringPreferencesKey("lib_layout")
+        val libColumns = intPreferencesKey("lib_columns")
         val headEnabled = booleanPreferencesKey("head_enabled")
         val camera = stringPreferencesKey("camera")
         val yaw = floatPreferencesKey("yaw")
@@ -156,6 +173,10 @@ class SettingsRepository(private val context: Context) {
         val halfPage = booleanPreferencesKey("half_page")
         val crop = booleanPreferencesKey("crop_margins")
         val night = booleanPreferencesKey("night_mode")
+        val continuous = booleanPreferencesKey("continuous_scroll")
+        val scrollWidth = floatPreferencesKey("scroll_width")
+        val showSpots = booleanPreferencesKey("show_spots")
+        val recognize = booleanPreferencesKey("recognize_titles")
         val finger = booleanPreferencesKey("finger")
         val toolbarPos = stringPreferencesKey("toolbar_pos")
         val haptics = booleanPreferencesKey("haptics")
@@ -184,6 +205,8 @@ class SettingsRepository(private val context: Context) {
             prefs[K.theme] = updated.themeMode.name
             prefs[K.dynamic] = updated.useDynamicColor
             prefs[K.sort] = updated.sort.name
+            prefs[K.libLayout] = updated.libraryLayout.name
+            prefs[K.libColumns] = updated.libraryColumns
             prefs[K.headEnabled] = updated.headTrackingEnabled
             prefs[K.camera] = updated.camera.name
             prefs[K.yaw] = updated.yawThresholdDeg
@@ -207,6 +230,10 @@ class SettingsRepository(private val context: Context) {
             prefs[K.halfPage] = updated.halfPageTurn
             prefs[K.crop] = updated.cropMargins
             prefs[K.night] = updated.nightMode
+            prefs[K.continuous] = updated.continuousScroll
+            prefs[K.scrollWidth] = updated.scrollWidth
+            prefs[K.showSpots] = updated.showSpots
+            prefs[K.recognize] = updated.recognizeTitles
             prefs[K.finger] = updated.fingerDrawing
             prefs[K.toolbarPos] = updated.toolbarPosition.name
             prefs[K.haptics] = updated.haptics
@@ -234,6 +261,8 @@ class SettingsRepository(private val context: Context) {
             themeMode = enumOr(this[K.theme], d.themeMode),
             useDynamicColor = this[K.dynamic] ?: d.useDynamicColor,
             sort = enumOr(this[K.sort], d.sort),
+            libraryLayout = enumOr(this[K.libLayout], d.libraryLayout),
+            libraryColumns = this[K.libColumns] ?: d.libraryColumns,
             headTrackingEnabled = this[K.headEnabled] ?: d.headTrackingEnabled,
             camera = enumOr(this[K.camera], d.camera),
             yawThresholdDeg = this[K.yaw] ?: d.yawThresholdDeg,
@@ -257,6 +286,10 @@ class SettingsRepository(private val context: Context) {
             halfPageTurn = this[K.halfPage] ?: d.halfPageTurn,
             cropMargins = this[K.crop] ?: d.cropMargins,
             nightMode = this[K.night] ?: d.nightMode,
+            continuousScroll = this[K.continuous] ?: d.continuousScroll,
+            scrollWidth = (this[K.scrollWidth] ?: d.scrollWidth).coerceIn(0.4f, 1f),
+            showSpots = this[K.showSpots] ?: d.showSpots,
+            recognizeTitles = this[K.recognize] ?: d.recognizeTitles,
             fingerDrawing = this[K.finger] ?: d.fingerDrawing,
             toolbarPosition = enumOr(this[K.toolbarPos], d.toolbarPosition),
             haptics = this[K.haptics] ?: d.haptics,

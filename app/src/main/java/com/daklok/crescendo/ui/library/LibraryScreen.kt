@@ -1,19 +1,30 @@
 package com.daklok.crescendo.ui.library
 
-import androidx.compose.material.icons.outlined.TravelExplore
-import androidx.compose.material.icons.automirrored.outlined.Label
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import kotlin.math.max
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalConfiguration
+import com.daklok.crescendo.data.LibraryLayout
+import com.daklok.crescendo.ui.common.FabMenuItem
+import com.daklok.crescendo.ui.common.FabMenu
+import com.daklok.crescendo.data.PracticeGoal
+import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.DocumentScanner
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material.icons.outlined.MoreVert
 import com.daklok.crescendo.ui.common.isCompactWidth
 import com.daklok.crescendo.ui.setlist.AddToSetlistDialog
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
-import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import com.daklok.crescendo.ui.common.ExportRequest
 import com.daklok.crescendo.ui.common.ExportPdfDialog
 import com.daklok.crescendo.ui.common.FOLDER_COLORS
@@ -57,7 +68,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -68,31 +78,21 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryMusic
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -108,15 +108,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daklok.crescendo.data.FolderEntity
-import com.daklok.crescendo.data.LibrarySort
 import com.daklok.crescendo.data.PieceEntity
 import com.daklok.crescendo.ui.common.AppMark
-import com.daklok.crescendo.ui.common.IconBadge
 import com.daklok.crescendo.ui.common.Motion
 import com.daklok.crescendo.ui.common.NotificationHost
 import com.daklok.crescendo.ui.common.NotificationType
@@ -144,8 +141,8 @@ fun LibraryScreen(
     val haptic = rememberHaptic()
     val notifier = rememberNotifier()
     var searchOpen by remember { mutableStateOf(false) }
-    var sortMenuOpen by remember { mutableStateOf(false) }
-    var compactMenuOpen by remember { mutableStateOf(false) }
+    /** Rozbalená ponuka pridania nôt (plávajúce tlačidlo). */
+    var fabOpen by remember { mutableStateOf(false) }
     val compact = isCompactWidth()
 
     var newFolderOpen by remember { mutableStateOf(false) }
@@ -160,17 +157,21 @@ fun LibraryScreen(
     var addingToSetlist by remember { mutableStateOf<List<Long>?>(null) }
     val setlists by vm.setlists.collectAsStateWithLifecycle()
     val selection by vm.selection.collectAsStateWithLifecycle()
+    val today by vm.today.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // denný cieľ sa mení len v denníku cvičenia; po návrate sa knižnica skladá nanovo
+    val goalMin = remember { PracticeGoal.get(context).coerceAtLeast(1) }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { m ->
-            notifier.show(m.text, if (m.error) NotificationType.ERROR else NotificationType.SUCCESS)
+            notifier.show(m.text, if (m.error) NotificationType.ERROR else NotificationType.SUCCESS, m.actionLabel, m.onAction)
         }
     }
 
-    // Späť = najprv zruší výber, potom o priečinok vyššie
-    BackHandler(enabled = selection.active) { vm.clearSelection() }
-    BackHandler(enabled = state.currentFolder != null && !selection.active) {
+    // Späť: najprv zavrie ponuku pridania, potom zruší výber, potom o priečinok vyššie
+    BackHandler(enabled = fabOpen) { fabOpen = false }
+    BackHandler(enabled = selection.active && !fabOpen) { vm.clearSelection() }
+    BackHandler(enabled = state.currentFolder != null && !selection.active && !fabOpen) {
         haptic(HapticFeedbackType.TextHandleMove)
         vm.goUp()
     }
@@ -215,12 +216,22 @@ fun LibraryScreen(
     )
     val launchScan = {
         haptic(HapticFeedbackType.LongPress)
-        // nový sken (nie doplnenie) – zrušíme prípadné nedokončené doplnenie
+        // nový sken (nie doplnenie): zrušíme prípadné nedokončené doplnenie
         pendingAppend = null
         if (pro.allowNewPieces()) startScan()
     }
 
     val current = state.currentFolder
+    val home = HomeInfo(
+        todaySec = today.todaySec,
+        streak = today.streak,
+        goalMin = goalMin,
+        setlistCount = setlists.size,
+        isPro = isPro,
+    )
+
+    // výber skladieb: ponuka pridania sa zavrie
+    LaunchedEffect(selection.active) { if (selection.active) fabOpen = false }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -248,229 +259,17 @@ fun LibraryScreen(
                             } else null,
                         )
                     } else {
-                        TopAppBar(
-                            title = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AnimatedContent(
-                                        targetState = current == null,
-                                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-                                        label = "markOrBack",
-                                    ) { atRoot ->
-                                        if (atRoot) {
-                                            AppMark(32.dp)
-                                        } else {
-                                            TonalIconButton(
-                                                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                                                contentDescription = stringResource(R.string.back),
-                                                onClick = { vm.goUp() },
-                                            )
-                                        }
-                                    }
-                                    Spacer(Modifier.width(12.dp))
-                                    AnimatedContent(
-                                        targetState = current?.name ?: "Crescendo",
-                                        transitionSpec = {
-                                            (fadeIn(tween(220)) + slideInHorizontally { it / 6 }) togetherWith fadeOut(tween(150))
-                                        },
-                                        label = "title",
-                                    ) { title ->
-                                        Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
+                        LibraryTopBar(
+                            title = current?.name ?: stringResource(R.string.library),
+                            atRoot = current == null,
+                            searchOpen = searchOpen,
+                            onSearch = {
+                                searchOpen = !searchOpen
+                                if (!searchOpen) vm.setQuery("")
                             },
-                            actions = {
-                              if (compact) {
-                                // mobil: hľadanie, ponuka ⋯ (setlisty, priečinok, zoradenie) a nastavenia
-                                TonalIconButton(
-                                    icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
-                                    contentDescription = stringResource(R.string.search),
-                                    highlighted = searchOpen,
-                                    onClick = {
-                                        searchOpen = !searchOpen
-                                        if (!searchOpen) vm.setQuery("")
-                                    },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Box {
-                                    TonalIconButton(
-                                        icon = Icons.Outlined.MoreVert,
-                                        contentDescription = stringResource(R.string.more),
-                                        onClick = { compactMenuOpen = true },
-                                    )
-                                    DropdownMenu(
-                                        expanded = compactMenuOpen,
-                                        onDismissRequest = { compactMenuOpen = false },
-                                        shape = RoundedCornerShape(16.dp),
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.setlists)) },
-                                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) },
-                                            trailingIcon = { if (!isPro) com.daklok.crescendo.ui.pro.ProBadge() },
-                                            onClick = { compactMenuOpen = false; onOpenSetlists() },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.catalog)) },
-                                            leadingIcon = { Icon(Icons.Outlined.TravelExplore, null) },
-                                            onClick = { compactMenuOpen = false; onOpenCatalog() },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.practice)) },
-                                            leadingIcon = { Icon(Icons.Outlined.Insights, null) },
-                                            onClick = { compactMenuOpen = false; onOpenPractice() },
-                                        )
-
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.new_folder)) },
-                                            leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
-                                            onClick = { compactMenuOpen = false; newFolderOpen = true },
-                                        )
-                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                        Text(
-                                            stringResource(R.string.sort),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                                        )
-                                        LibrarySort.entries.forEach { option ->
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(option.labelRes)) },
-                                                leadingIcon = {
-                                                    if (option == state.sort) Icon(Icons.Outlined.Check, null)
-                                                    else Spacer(Modifier.size(24.dp))
-                                                },
-                                                onClick = {
-                                                    haptic(HapticFeedbackType.TextHandleMove)
-                                                    vm.setSort(option)
-                                                    compactMenuOpen = false
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.Settings,
-                                    contentDescription = stringResource(R.string.settings),
-                                    onClick = onOpenSettings,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                )
-                              } else {
-                                TonalIconButton(
-                                    icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
-                                    contentDescription = stringResource(R.string.search),
-                                    highlighted = searchOpen,
-                                    onClick = {
-                                        searchOpen = !searchOpen
-                                        if (!searchOpen) vm.setQuery("")
-                                    },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.TravelExplore,
-                                    contentDescription = stringResource(R.string.catalog),
-                                    onClick = onOpenCatalog,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.Insights,
-                                    contentDescription = stringResource(R.string.practice),
-                                    onClick = onOpenPractice,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.AutoMirrored.Outlined.QueueMusic,
-                                    contentDescription = stringResource(R.string.setlists),
-                                    onClick = onOpenSetlists,
-                                    pro = !isPro,
-                                )
-
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.CreateNewFolder,
-                                    contentDescription = stringResource(R.string.new_folder),
-                                    onClick = { newFolderOpen = true },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Box {
-                                    TonalIconButton(
-                                        icon = Icons.AutoMirrored.Outlined.Sort,
-                                        contentDescription = stringResource(R.string.sort),
-                                        onClick = { sortMenuOpen = true },
-                                    )
-                                    DropdownMenu(
-                                        expanded = sortMenuOpen,
-                                        onDismissRequest = { sortMenuOpen = false },
-                                        shape = RoundedCornerShape(16.dp),
-                                    ) {
-                                        LibrarySort.entries.forEach { option ->
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(option.labelRes)) },
-                                                leadingIcon = {
-                                                    if (option == state.sort) Icon(Icons.Outlined.Check, null)
-                                                    else Spacer(Modifier.size(24.dp))
-                                                },
-                                                onClick = {
-                                                    haptic(HapticFeedbackType.TextHandleMove)
-                                                    vm.setSort(option)
-                                                    sortMenuOpen = false
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                TonalIconButton(
-                                    icon = Icons.Outlined.Settings,
-                                    contentDescription = stringResource(R.string.settings),
-                                    onClick = onOpenSettings,
-                                    modifier = Modifier.padding(end = 8.dp),
-                                )
-                              }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.background,
-                                scrolledContainerColor = MaterialTheme.colorScheme.background,
-                                titleContentColor = MaterialTheme.colorScheme.onBackground,
-                            ),
-                        )
-                    }
-                }
-            },
-            floatingActionButton = {
-                AnimatedVisibility(
-                    visible = !selection.active,
-                    enter = scaleIn(Motion.bouncy()) + fadeIn(),
-                    exit = scaleOut(tween(160)) + fadeOut(tween(160)),
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        // verzia zadarmo: koľko skladieb ešte zostáva (ťuk → Pro)
-                        if (!isPro) {
-                            com.daklok.crescendo.ui.pro.LibraryQuota(
-                                count = pieceCount,
-                                limit = com.daklok.crescendo.data.pro.ProManager.FREE_PIECES,
-                                onClick = { pro.showPaywall(com.daklok.crescendo.data.pro.ProFeature.LIBRARY) },
-                            )
-                        }
-                        // naskenovať noty fotoaparátom
-                        SmallFloatingActionButton(
-                            onClick = { launchScan() },
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        ) {
-                            Icon(Icons.Outlined.DocumentScanner, contentDescription = stringResource(R.string.scan_music))
-                        }
-                        ExtendedFloatingActionButton(
-                            onClick = { launchImport() },
-                            shape = RoundedCornerShape(20.dp),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-                            text = { Text(if (current != null) stringResource(R.string.import_here) else stringResource(R.string.import_pdf)) },
-                            expanded = !state.globalView,
+                            onBack = { vm.goUp() },
+                            onNewFolder = { newFolderOpen = true },
+                            onOpenSettings = onOpenSettings,
                         )
                     }
                 }
@@ -498,9 +297,9 @@ fun LibraryScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(28.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ),
                     )
                 }
@@ -517,7 +316,7 @@ fun LibraryScreen(
                     })
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
 
                 // ── Panel s obsahom (zaoblený ako v Bible Lock Screen) ─
                 Box(
@@ -539,6 +338,7 @@ fun LibraryScreen(
                             s = s,
                             vm = vm,
                             selection = selection,
+                            home = home,
                             onColorFolder = { coloringFolder = it },
                             onAddToSetlist = { piece -> addingToSetlist = listOf(piece.id) },
                             onAppend = { piece -> appendTarget = piece },
@@ -558,10 +358,64 @@ fun LibraryScreen(
                             onRenameFolder = { renamingFolder = it },
                             onDeleteFolder = { deletingFolder = it },
                             onMove = { moving = it },
+                            onOpenCatalog = onOpenCatalog,
+                            onOpenPractice = onOpenPractice,
+                            onOpenSetlists = onOpenSetlists,
                         )
                     }
                 }
             }
+        }
+
+        // ── Ponuka pridania nôt: stmavené pozadie a plávajúce tlačidlo ──
+        val scrim by animateFloatAsState(if (fabOpen) 1f else 0f, tween(220), label = "scrim")
+        val scrimInteraction = remember { MutableInteractionSource() }
+        if (scrim > 0.01f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = scrim }
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                    .clickable(interactionSource = scrimInteraction, indication = null) { fabOpen = false },
+            )
+        }
+        AnimatedVisibility(
+            visible = !selection.active,
+            enter = scaleIn(Motion.bouncy(), transformOrigin = TransformOrigin(1f, 1f)) + fadeIn(),
+            exit = scaleOut(tween(160), transformOrigin = TransformOrigin(1f, 1f)) + fadeOut(tween(160)),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = if (compact) 16.dp else 24.dp, bottom = if (compact) 16.dp else 24.dp),
+        ) {
+            FabMenu(
+                expanded = fabOpen,
+                onExpandedChange = { fabOpen = it },
+                items = listOf(
+                    FabMenuItem(
+                        icon = Icons.Outlined.FileOpen,
+                        label = if (current != null) stringResource(R.string.import_here) else stringResource(R.string.import_pdf),
+                        onClick = { launchImport() },
+                    ),
+                    FabMenuItem(
+                        icon = Icons.Outlined.DocumentScanner,
+                        label = stringResource(R.string.scan_music),
+                        onClick = { launchScan() },
+                    ),
+                ),
+                contentDescription = if (fabOpen) stringResource(R.string.close) else stringResource(R.string.fab_add_music),
+                large = !compact,
+                above = {
+                    // verzia zadarmo: koľko skladieb ešte zostáva (ťuk: Pro)
+                    if (!isPro) {
+                        com.daklok.crescendo.ui.pro.LibraryQuota(
+                            count = pieceCount,
+                            limit = com.daklok.crescendo.data.pro.ProManager.FREE_PIECES,
+                            onClick = { pro.showPaywall(com.daklok.crescendo.data.pro.ProFeature.LIBRARY) },
+                        )
+                    }
+                },
+            )
         }
 
         NotificationHost(
@@ -569,7 +423,7 @@ fun LibraryScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 96.dp),
+                .padding(bottom = if (compact) 96.dp else 112.dp),
         )
     }
 
@@ -586,6 +440,7 @@ fun LibraryScreen(
                 newFolderOpen = false
             },
             onDismiss = { newFolderOpen = false },
+            icon = Icons.Outlined.CreateNewFolder,
         )
     }
 
@@ -596,6 +451,7 @@ fun LibraryScreen(
             confirmLabel = stringResource(R.string.save),
             onConfirm = { vm.renameFolder(folder, it); renamingFolder = null },
             onDismiss = { renamingFolder = null },
+            icon = Icons.Outlined.Folder,
         )
     }
 
@@ -603,7 +459,7 @@ fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { deletingFolder = null },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Folder, null) },
+            icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Folder, com.daklok.crescendo.ui.common.ExpressiveShapes.Squircle, com.daklok.crescendo.ui.common.Accent.Secondary) },
             title = { Text(stringResource(R.string.remove_folder_title)) },
             text = {
                 Text(stringResource(R.string.remove_folder_text, folder.name))
@@ -649,6 +505,7 @@ fun LibraryScreen(
         PieceDetailsDialog(
             piece = piece,
             allTags = state.allTags,
+            onRecognize = { vm.recognize(piece) },
             onSave = {
                 haptic(HapticFeedbackType.LongPress)
                 vm.updateDetails(it)
@@ -682,16 +539,25 @@ fun LibraryScreen(
                 java.text.SimpleDateFormat("d. M. yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
             )
         }
+        // názov a skladateľ z prvej strany skenu (kým píšeš, prečíta sa na pozadí)
+        val recognizeOn = vm.settings.collectAsStateWithLifecycle().value.recognizeTitles
+        var scanGuess by remember(uri) { mutableStateOf<com.daklok.crescendo.data.TitleRecognizer.Result?>(null) }
+        LaunchedEffect(uri, recognizeOn) {
+            if (recognizeOn) scanGuess = com.daklok.crescendo.data.TitleRecognizer.recognize(context, uri)
+        }
         NameDialog(
             title = stringResource(R.string.scan_name_title),
             initial = defaultName,
             confirmLabel = stringResource(R.string.save),
             onConfirm = { name ->
                 haptic(HapticFeedbackType.LongPress)
-                vm.importScan(uri, name)
+                vm.importScan(uri, name, scanGuess?.composer)
                 scannedPdf = null
             },
             onDismiss = { scannedPdf = null },
+            icon = Icons.Outlined.DocumentScanner,
+            suggestion = scanGuess?.title,
+            supporting = scanGuess?.composer?.let { stringResource(R.string.scan_recognized_composer, it) },
         )
     }
 
@@ -723,7 +589,7 @@ fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { bulkDeleteOpen = false },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Delete, null) },
+            icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Delete, destructive = true) },
             title = { Text(pluralStringResource(R.plurals.delete_n_title, selection.count, selection.count)) },
             text = {
                 Text(
@@ -812,11 +678,96 @@ private fun folderTransition(forward: Boolean): ContentTransform {
         (fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { -dir * it / 6 })
 }
 
+/**
+ * Horná lišta knižnice v jednom riadku: logo (v priečinku späť), veľký výrazný nadpis
+ * a tri akcie (hľadať, nový priečinok, nastavenia). Ostatné ciele sú v dlaždiciach.
+ * Jeden riadok šetrí výšku, čo je na tablete na šírku dôležité.
+ */
+@Composable
+private fun LibraryTopBar(
+    title: String,
+    atRoot: Boolean,
+    searchOpen: Boolean,
+    onSearch: () -> Unit,
+    onBack: () -> Unit,
+    onNewFolder: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val compact = isCompactWidth()
+    TopAppBar(
+        expandedHeight = TopBarHeight,
+        title = {
+            AnimatedContent(
+                targetState = title,
+                transitionSpec = {
+                    (fadeIn(tween(220)) + slideInHorizontally { it / 6 }) togetherWith fadeOut(tween(150))
+                },
+                label = "title",
+            ) { t ->
+                Text(
+                    t,
+                    style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        navigationIcon = {
+            AnimatedContent(
+                targetState = atRoot,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                label = "markOrBack",
+            ) { root ->
+                if (root) {
+                    AppMark(40.dp, Modifier.padding(start = 12.dp, end = 10.dp))
+                } else {
+                    TonalIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 12.dp, end = 10.dp),
+                    )
+                }
+            }
+        },
+        actions = {
+            TonalIconButton(
+                icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
+                contentDescription = stringResource(R.string.search),
+                highlighted = searchOpen,
+                onClick = onSearch,
+            )
+            Spacer(Modifier.width(8.dp))
+            TonalIconButton(
+                icon = Icons.Outlined.CreateNewFolder,
+                contentDescription = stringResource(R.string.new_folder),
+                onClick = onNewFolder,
+            )
+            Spacer(Modifier.width(8.dp))
+            TonalIconButton(
+                icon = Icons.Outlined.Settings,
+                contentDescription = stringResource(R.string.settings),
+                onClick = onOpenSettings,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.onBackground,
+        ),
+    )
+}
+
+/** Výška hornej lišty knižnice (rovnaká aj v režime výberu, aby obsah neposkočil). */
+private val TopBarHeight = 72.dp
+
 @Composable
 private fun LibraryGrid(
     s: LibraryUiState,
     vm: LibraryViewModel,
     selection: Selection,
+    home: HomeInfo,
     onColorFolder: (FolderEntity) -> Unit,
     onAddToSetlist: (PieceEntity) -> Unit,
     onAppend: (PieceEntity) -> Unit,
@@ -830,22 +781,107 @@ private fun LibraryGrid(
     onRenameFolder: (FolderEntity) -> Unit,
     onDeleteFolder: (FolderEntity) -> Unit,
     onMove: (MoveTarget) -> Unit,
+    onOpenCatalog: () -> Unit,
+    onOpenPractice: () -> Unit,
+    onOpenSetlists: () -> Unit,
 ) {
-    val haptic = rememberHaptic()
     val gridState = rememberLazyGridState()
     val current = s.currentFolder
-    // mobil: menšie karty (2 stĺpce), užšie okraje
+    // mobil: 2 stĺpce listov, užšie okraje
     val compact = isCompactWidth()
-    val side = if (compact) 12.dp else 20.dp
-    val gap = if (compact) 12.dp else 16.dp
+    val side = if (compact) 14.dp else 24.dp
+    val gap = if (compact) 12.dp else 18.dp
+    val atRoot = current == null && !s.globalView
+    val libraryEmpty = s.loaded && s.totalCount == 0 && s.folders.isEmpty() && current == null
 
+    // ── rozloženie: priečinky majú vlastný počet stĺpcov, skladby podľa nastavenia (mriežka / zoznam) ──
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val avail = LocalConfiguration.current.screenWidthDp.dp - side * 2
+    fun fit(min: Dp): Int = max(1, ((avail + gap) / (min + gap)).toInt())
+    val list = settings.libraryLayout == LibraryLayout.LIST
+    val folderFit = if (compact) 1 else fit(184.dp)
+    // najviac toľko v riadku, aby bol list aspoň 96 dp široký (a nie viac ako 7)
+    val maxCols = fit(96.dp).coerceIn(2, 7)
+    val pieceCols = when {
+        list -> 1
+        settings.libraryColumns <= 0 -> fit(if (compact) 148.dp else 184.dp)
+        else -> settings.libraryColumns.coerceAtMost(maxCols)
+    }
+    // spoločná mriežka: počet stĺpcov deliteľný oboma, každá položka zaberie svoj diel
+    // (keby bolo stĺpcov priveľa a medzery by sa nezmestili, priečinky sa prispôsobia skladbám)
+    val folderCols = if ((lcm(folderFit, pieceCols) - 1) * gap.value > avail.value * 0.6f) {
+        (folderFit downTo 1).first { pieceCols % it == 0 }
+    } else {
+        folderFit
+    }
+    val totalCols = lcm(folderCols, pieceCols)
+    val cell = (avail - gap * (pieceCols - 1)) / pieceCols
+    val dense = !list && cell < 150.dp
+    val columnOptions = listOf(0) + (2..maxCols).toList()
+    val weekly by vm.weekly.collectAsStateWithLifecycle()
+
+    // štipnutie ako v Galérii: roztiahnutie = väčšie listy (až po zoznam), stiahnutie = viac v riadku
+    val gridHaptic = rememberHaptic()
+    var pinchScale by remember { mutableFloatStateOf(1f) }
+    val shownScale by animateFloatAsState(pinchScale, label = "pinchScale")
+    var gridHint by remember { mutableStateOf<String?>(null) }
+    var gridHintTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(gridHintTick) {
+        if (gridHint != null) {
+            kotlinx.coroutines.delay(1100)
+            gridHint = null
+        }
+    }
+    val listLabel = stringResource(R.string.lib_view_list)
+    val perRowLabel = stringResource(R.string.lib_pinch_per_row)
+    val stepGrid by rememberUpdatedState { dir: Int ->
+        val cur = if (list) 1 else pieceCols
+        val next = (cur + dir).coerceIn(1, maxCols)
+        if (next != cur) {
+            if (next == 1) vm.setView(LibraryLayout.LIST, settings.libraryColumns) else vm.setView(LibraryLayout.GRID, next)
+            gridHint = if (next == 1) listLabel else perRowLabel.format(next)
+            gridHintTick++
+            gridHaptic(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(minSize = if (compact) 150.dp else 200.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = side, end = side, top = if (compact) 20.dp else 28.dp, bottom = 120.dp),
+        columns = GridCells.Fixed(totalCols),
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var acc = 1f
+                    var pinching = false
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.count { it.pressed } >= 2) {
+                            pinching = true
+                            acc *= event.calculateZoom()
+                            pinchScale = acc.coerceIn(0.88f, 1.12f)
+                            if (acc > 1.28f) {
+                                stepGrid(-1)
+                                acc = 1f
+                            } else if (acc < 0.78f) {
+                                stepGrid(1)
+                                acc = 1f
+                            }
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                    if (pinching) pinchScale = 1f
+                }
+            }
+            .graphicsLayer {
+                scaleX = shownScale
+                scaleY = shownScale
+            },
+        contentPadding = PaddingValues(start = side, end = side, top = if (compact) 18.dp else 24.dp, bottom = 136.dp),
         horizontalArrangement = Arrangement.spacedBy(gap),
-        verticalArrangement = Arrangement.spacedBy(gap),
+        verticalArrangement = Arrangement.spacedBy(if (list) 10.dp else if (compact) 16.dp else 20.dp),
     ) {
         if (s.importing) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "importing") {
@@ -860,20 +896,32 @@ private fun LibraryGrid(
             }
         }
 
-        val hero = s.continueReading
-        if (hero != null && !s.globalView) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "hero") {
-                ContinueCard(
-                    piece = hero,
-                    thumb = vm.thumbFile(hero),
-                    onOpen = { onOpenPiece(hero.id) },
+        // prázdna knižnica: najprv výzva na import, pod ňou dlaždice (napr. voľné noty)
+        if (libraryEmpty) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
+                EmptyLibrary(onImport = onImport, onScan = onScan, modifier = Modifier.animateItem())
+            }
+        }
+
+        // ── Úvod: Pokračuj a dlaždice ──
+        if (atRoot) {
+            val hero = s.continueReading
+            item(span = { GridItemSpan(maxLineSpan) }, key = "home") {
+                LibraryHomeTop(
+                    hero = hero,
+                    heroThumb = hero?.let { vm.thumbFile(it) },
+                    info = home,
+                    onOpenHero = { hero?.let { onOpenPiece(it.id) } },
+                    onCatalog = onOpenCatalog,
+                    onPractice = onOpenPractice,
+                    onSetlists = onOpenSetlists,
                     modifier = Modifier.animateItem(),
                 )
             }
-            // ďalšie naposledy otvorené skladby – rýchly návrat jedným ťuknutím
-            if (s.recent.isNotEmpty()) {
+            // ďalšie naposledy otvorené skladby: rýchly návrat jedným ťuknutím
+            if (hero != null && s.recent.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "recent") {
-                    androidx.compose.foundation.lazy.LazyRow(
+                    LazyRow(
                         modifier = Modifier.animateItem(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
@@ -884,65 +932,36 @@ private fun LibraryGrid(
                     }
                 }
             }
+            // týždeň v skratke (raz za týždeň, kým ho nezavrieš)
+            weekly?.let { w ->
+                item(span = { GridItemSpan(maxLineSpan) }, key = "weekly") {
+                    com.daklok.crescendo.ui.stats.WeeklyCard(
+                        summary = w.summary,
+                        topTitle = w.topTitle,
+                        title = stringResource(R.string.weekly_title_your),
+                        goalSec = w.goalSec,
+                        onClick = onOpenPractice,
+                        onDismiss = { vm.dismissWeekly() },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
         }
 
         if (s.totalCount > 0) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "filters") {
-                Row(
+                FilterPills(
+                    s = s,
+                    onAll = {
+                        vm.setFavoritesOnly(false)
+                        vm.setTagFilter(null)
+                    },
+                    onFavorites = { vm.setFavoritesOnly(!s.favoritesOnly) },
+                    onTag = { tag -> vm.setTagFilter(if (s.tagFilter == tag) null else tag) },
                     modifier = Modifier
                         .animateItem()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    FilterChip(
-                        selected = !s.favoritesOnly && s.tagFilter == null,
-                        onClick = {
-                            haptic(HapticFeedbackType.TextHandleMove)
-                            vm.setFavoritesOnly(false)
-                            vm.setTagFilter(null)
-                        },
-                        label = { Text(if (current != null) stringResource(R.string.this_folder) else stringResource(R.string.all_count, s.totalCount)) },
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = if (!s.favoritesOnly && s.tagFilter == null) {
-                            { Icon(Icons.Outlined.Check, null, Modifier.size(FilterChipDefaults.IconSize)) }
-                        } else null,
-                    )
-                    FilterChip(
-                        selected = s.favoritesOnly,
-                        onClick = {
-                            haptic(HapticFeedbackType.TextHandleMove)
-                            vm.setFavoritesOnly(true)
-                        },
-                        label = { Text(stringResource(R.string.favorites)) },
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = {
-                            Icon(
-                                if (s.favoritesOnly) Icons.Outlined.Check else Icons.Outlined.StarOutline,
-                                null,
-                                Modifier.size(FilterChipDefaults.IconSize),
-                            )
-                        },
-                    )
-                    // štítky skladieb
-                    s.allTags.forEach { tag ->
-                        FilterChip(
-                            selected = s.tagFilter == tag,
-                            onClick = {
-                                haptic(HapticFeedbackType.TextHandleMove)
-                                vm.setTagFilter(if (s.tagFilter == tag) null else tag)
-                            },
-                            label = { Text(tag) },
-                            shape = RoundedCornerShape(12.dp),
-                            leadingIcon = {
-                                Icon(
-                                    if (s.tagFilter == tag) Icons.Outlined.Check else Icons.AutoMirrored.Outlined.Label,
-                                    null,
-                                    Modifier.size(FilterChipDefaults.IconSize),
-                                )
-                            },
-                        )
-                    }
-                }
+                        .padding(top = 4.dp),
+                )
             }
         }
 
@@ -955,11 +974,12 @@ private fun LibraryGrid(
             items(
                 s.folders,
                 key = { "f${it.id}" },
-                span = { if (compact) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
+                span = { if (compact) GridItemSpan(maxLineSpan) else GridItemSpan(totalCols / folderCols) },
             ) { folder ->
                 FolderCard(
                     folder = folder,
                     itemCount = s.folderCounts[folder.id] ?: 0,
+                    thumbs = s.folderThumbs[folder.id].orEmpty().map { vm.thumbFile(it) },
                     onOpen = { vm.openFolder(folder.id) },
                     onRename = { onRenameFolder(folder) },
                     onColor = { onColorFolder(folder) },
@@ -974,11 +994,7 @@ private fun LibraryGrid(
         }
 
         // ── Skladby ──
-        if (s.loaded && s.totalCount == 0 && s.folders.isEmpty() && current == null) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
-                EmptyLibrary(onImport = onImport, onScan = onScan, modifier = Modifier.animateItem())
-            }
-        } else if (s.pieces.isEmpty() && (s.globalView || s.folders.isEmpty())) {
+        if (!libraryEmpty && s.pieces.isEmpty() && (s.globalView || s.folders.isEmpty())) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "nothing") {
                 EmptyHint(
                     text = if (s.globalView) stringResource(R.string.nothing_found)
@@ -987,16 +1003,20 @@ private fun LibraryGrid(
                 )
             }
         } else if (s.pieces.isNotEmpty()) {
-            if (s.folders.isNotEmpty() || s.globalView) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "h-pieces") {
-                    SectionHeader(
-                        Icons.Outlined.MusicNote,
-                        if (s.globalView) stringResource(R.string.results_count, s.pieces.size) else stringResource(R.string.pieces),
-                        Modifier.animateItem(),
-                    )
-                }
+            item(span = { GridItemSpan(maxLineSpan) }, key = "h-pieces") {
+                PiecesHeader(
+                    title = if (s.globalView) stringResource(R.string.results_count, s.pieces.size) else stringResource(R.string.pieces),
+                    sort = s.sort,
+                    onSort = vm::setSort,
+                    layout = settings.libraryLayout,
+                    columns = settings.libraryColumns,
+                    columnOptions = columnOptions,
+                    onLayout = vm::setLayout,
+                    onColumns = vm::setColumns,
+                    modifier = Modifier.animateItem(),
+                )
             }
-            items(s.pieces, key = { "p${it.id}" }) { piece ->
+            items(s.pieces, key = { "p${it.id}" }, span = { GridItemSpan(totalCols / pieceCols) }) { piece ->
                 PieceCard(
                     piece = piece,
                     thumb = vm.thumbFile(piece),
@@ -1015,10 +1035,41 @@ private fun LibraryGrid(
                     selectionMode = selection.active,
                     selected = piece.id in selection.pieces,
                     onSelect = { vm.togglePiece(piece.id) },
+                    list = list,
+                    dense = dense,
                 )
             }
         }
     }
+    // po štipnutí krátko ukáže nové rozloženie
+    androidx.compose.animation.AnimatedVisibility(
+        visible = gridHint != null,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 12.dp),
+        enter = fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.9f),
+        exit = fadeOut(),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            shadowElevation = 4.dp,
+        ) {
+            Text(
+                gridHint.orEmpty(),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+    }
+}
+
+/** Najmenší spoločný násobok (počet stĺpcov spoločnej mriežky priečinkov a skladieb). */
+private fun lcm(a: Int, b: Int): Int {
+    tailrec fun gcd(x: Int, y: Int): Int = if (y == 0) x else gcd(y, x % y)
+    return a / gcd(a, b) * b
 }
 
 /** Horná lišta v režime výberu: počet, vybrať všetko, presunúť, zmazať. */
@@ -1032,6 +1083,7 @@ private fun SelectionTopBar(
     onAddToSetlist: (() -> Unit)?,
 ) {
     TopAppBar(
+        expandedHeight = TopBarHeight,
         navigationIcon = {
             TonalIconButton(
                 icon = Icons.Outlined.Close,
@@ -1099,7 +1151,7 @@ private fun Breadcrumbs(path: List<FolderEntity>, onNavigate: (Long?) -> Unit) {
         contentPadding = PaddingValues(horizontal = 12.dp),
     ) {
         item {
-            TextButton(onClick = { onNavigate(null) }, shape = RoundedCornerShape(12.dp)) {
+            TextButton(onClick = { onNavigate(null) }, shape = RoundedCornerShape(50)) {
                 Icon(Icons.Outlined.LibraryMusic, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.library))
@@ -1117,7 +1169,7 @@ private fun Breadcrumbs(path: List<FolderEntity>, onNavigate: (Long?) -> Unit) {
                 TextButton(
                     onClick = { onNavigate(folder.id) },
                     enabled = !last,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                 ) {
                     Text(
                         folder.name,
@@ -1130,52 +1182,3 @@ private fun Breadcrumbs(path: List<FolderEntity>, onNavigate: (Long?) -> Unit) {
         }
     }
 }
-
-@Composable
-private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(vertical = 24.dp, horizontal = 4.dp),
-    )
-}
-
-@Composable
-private fun EmptyLibrary(onImport: () -> Unit, onScan: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 48.dp, horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        IconBadge(Icons.Outlined.LibraryMusic, active = true, size = 88.dp)
-        Spacer(Modifier.height(24.dp))
-        Text(
-            stringResource(R.string.library_empty_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.library_empty_text),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 480.dp),
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onImport, shape = RoundedCornerShape(20.dp)) {
-            Icon(Icons.Outlined.Add, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.import_pdf))
-        }
-        Spacer(Modifier.height(12.dp))
-        FilledTonalButton(onClick = onScan, shape = RoundedCornerShape(20.dp)) {
-            Icon(Icons.Outlined.DocumentScanner, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.scan_music))
-        }
-    }
-}
-

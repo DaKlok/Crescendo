@@ -10,6 +10,7 @@ import com.daklok.crescendo.data.AppSettings
 import com.daklok.crescendo.data.FolderEntity
 import com.daklok.crescendo.data.LibraryRepository
 import com.daklok.crescendo.data.LibrarySort
+import com.daklok.crescendo.data.LibraryLayout
 import com.daklok.crescendo.data.PieceEntity
 import com.daklok.crescendo.data.SettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,6 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
+import com.daklok.crescendo.data.PracticeSessionEntity
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,6 +38,8 @@ data class LibraryUiState(
     val allFolders: List<FolderEntity> = emptyList(),
     /** Počet položiek (skladby + podpriečinky) priamo v každom priečinku. */
     val folderCounts: Map<Long, Int> = emptyMap(),
+    /** Najnovšie skladby (najviac 3) v každom zobrazenom priečinku, pre náhľad na karte priečinka. */
+    val folderThumbs: Map<Long, List<PieceEntity>> = emptyMap(),
     val currentFolder: FolderEntity? = null,
     /** Cesta od knižnice po aktuálny priečinok. */
     val path: List<FolderEntity> = emptyList(),
@@ -58,7 +66,18 @@ data class Selection(val pieces: Set<Long> = emptySet(), val folders: Set<Long> 
 }
 
 /** Hlásenie pre plávajúcu notifikáciu. */
-data class UiMessage(val text: String, val error: Boolean = false)
+data class UiMessage(
+    val text: String,
+    val error: Boolean = false,
+    val actionLabel: String? = null,
+    val onAction: (() -> Unit)? = null,
+)
+
+/** Karta týždenného súhrnu: súhrn, názov najviac cvičenej skladby a denný cieľ (s). */
+data class WeeklyCardData(val summary: com.daklok.crescendo.data.WeekSummary, val topTitle: String?, val goalSec: Long)
+
+/** Dnešné cvičenie (pre dlaždicu Cvičenie v knižnici): sekundy dnes a počet dní v rade. */
+data class TodayPractice(val todaySec: Long = 0L, val streak: Int = 0)
 
 private data class Filters(
     val query: String,
@@ -86,8 +105,37 @@ class LibraryViewModel(
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
-    private fun say(text: String, error: Boolean = false) {
-        _messages.tryEmit(UiMessage(text, error))
+    private fun say(text: String, error: Boolean = false, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+        _messages.tryEmit(UiMessage(text, error, actionLabel, onAction))
+    }
+
+    /**
+     * Po importe prečíta prvú stranu: doplní skladateľa (ak chýba) a nahradí technický názov súboru
+     * („scan_001“, „IMSLP…“) rozpoznaným názvom. Pri jednej skladbe ukáže, čo sa našlo (so „Späť“).
+     */
+    private fun recognizeAfterImport(ids: List<Long>) {
+        if (ids.isEmpty() || !settings.value.recognizeTitles) return
+        val scanDefault = app.getString(R.string.scan_default_name, "")
+        viewModelScope.launch {
+            for (id in ids) {
+                val piece = library.getPiece(id) ?: continue
+                val r = com.daklok.crescendo.data.TitleRecognizer.recognize(app, library.pdfFile(piece)) ?: continue
+                val fresh = library.getPiece(id) ?: continue
+                val newTitle = r.title?.takeIf { com.daklok.crescendo.data.TitleRecognizer.shouldReplaceTitle(fresh.title, it, scanDefault) }
+                val newComposer = r.composer?.takeIf { fresh.composer.isBlank() }
+                if (newTitle == null && newComposer == null) continue
+                val updated = fresh.copy(title = newTitle ?: fresh.title, composer = newComposer ?: fresh.composer)
+                library.updateDetails(updated)
+                if (ids.size == 1) {
+                    val what = listOfNotNull(newTitle?.let { "„$it“" }, newComposer).joinToString(", ")
+                    say(
+                        app.getString(R.string.msg_recognized, what),
+                        actionLabel = app.getString(R.string.undo),
+                        onAction = { viewModelScope.launch { library.updateDetails(fresh) } },
+                    )
+                }
+            }
+        }
     }
 
     private val setlistRepo = (app as CrescendoApp).setlists
@@ -114,9 +162,53 @@ class LibraryViewModel(
         Filters(q, f, i, folder, tag)
     }
 
-    /** Kedy sa ktorá skladba naposledy cvičila (z denníka) – na zoradenie. */
-    private val lastPracticed = (app as CrescendoApp).practice.observeAll()
+    /** Denník cvičenia (zdieľaný pre zoradenie aj dlaždicu Cvičenie). */
+    private val sessions = (app as CrescendoApp).practice.observeAll()
+        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
+
+    /** Kedy sa ktorá skladba naposledy cvičila (z denníka), na zoradenie. */
+    private val lastPracticed = sessions
         .map { list -> list.groupBy { it.pieceId }.mapValues { (_, l) -> l.maxOf { it.startedAt + it.durationSec * 1000L } } }
+
+    /** Dnešné minúty a séria dní (dlaždica Cvičenie). */
+    val today: StateFlow<TodayPractice> = sessions
+        .map { list -> todayOf(list) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TodayPractice())
+
+    /** Týždenný súhrn minulého týždňa (karta v knižnici, kým ju používateľ nezavrie). */
+    private val weeklyDismissed = MutableStateFlow(com.daklok.crescendo.data.WeeklySummary.dismissedWeek(app))
+    val weekly: StateFlow<WeeklyCardData?> = combine(sessions, weeklyDismissed, library.observePieces()) { list, dismissed, pieces ->
+        val start = com.daklok.crescendo.data.WeeklySummary.weekStart(LocalDate.now()).minusWeeks(1)
+        if (start.toEpochDay() == dismissed) return@combine null
+        val goal = com.daklok.crescendo.data.PracticeGoal.get(app) * 60L
+        val summary = com.daklok.crescendo.data.WeeklySummary.compute(list, start, goal)
+        if (summary.totalSec <= 0) null
+        else WeeklyCardData(summary, summary.topPieceId?.let { id -> pieces.firstOrNull { it.id == id }?.title }, goal)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun dismissWeekly() {
+        val s = weekly.value?.summary ?: return
+        com.daklok.crescendo.data.WeeklySummary.dismiss(app, s.start)
+        weeklyDismissed.value = s.start.toEpochDay()
+    }
+
+    private fun todayOf(list: List<PracticeSessionEntity>): TodayPractice {
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.now(zone)
+        val perDay = HashMap<LocalDate, Long>()
+        for (s in list) {
+            val d = Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalDate()
+            perDay[d] = (perDay[d] ?: 0L) + s.durationSec
+        }
+        // séria: dnes (ak sa už cvičilo) alebo včera a dni pred tým bez prerušenia
+        var d = if ((perDay[day] ?: 0L) > 0L) day else day.minusDays(1)
+        var n = 0
+        while ((perDay[d] ?: 0L) > 0L && n < 5000) {
+            n++
+            d = d.minusDays(1)
+        }
+        return TodayPractice(todaySec = perDay[day] ?: 0L, streak = n)
+    }
 
     val state: StateFlow<LibraryUiState> = combine(
         library.observePieces(),
@@ -175,12 +267,22 @@ class LibraryViewModel(
             cursor = cursor.parentId?.let { byId[it] }
         }
 
+        val visibleFolders = if (global) emptyList()
+        else folders.filter { it.parentId == currentId }.sortedBy { it.name.lowercase() }
+        val visibleIds = visibleFolders.mapTo(HashSet()) { it.id }
+        val folderThumbs = if (visibleIds.isEmpty()) emptyMap() else {
+            all.filter { p -> p.folderId?.let { it in visibleIds } == true }
+                .sortedByDescending { maxOf(it.lastOpenedAt, it.addedAt) }
+                .groupBy { it.folderId ?: 0L }
+                .mapValues { (_, l) -> l.take(3) }
+        }
+
         LibraryUiState(
             pieces = sorted,
-            folders = if (global) emptyList()
-            else folders.filter { it.parentId == currentId }.sortedBy { it.name.lowercase() },
+            folders = visibleFolders,
             allFolders = folders,
             folderCounts = counts,
+            folderThumbs = folderThumbs,
             currentFolder = current,
             path = path,
             totalCount = all.size,
@@ -225,6 +327,10 @@ class LibraryViewModel(
         clearSelection()
         tagFilter.update { tag }
     }
+
+    /** Rozpoznanie názvu a skladateľa z prvej strany (tlačidlo v údajoch skladby). */
+    suspend fun recognize(piece: PieceEntity): com.daklok.crescendo.data.TitleRecognizer.Result? =
+        com.daklok.crescendo.data.TitleRecognizer.recognize(app, library.pdfFile(piece))
 
     fun updateDetails(piece: PieceEntity) {
         if (piece.title.isBlank()) return
@@ -302,6 +408,22 @@ class LibraryViewModel(
         viewModelScope.launch { settingsRepo.update { it.copy(sort = sort) } }
     }
 
+    fun setLayout(layout: LibraryLayout) {
+        viewModelScope.launch { settingsRepo.update { it.copy(libraryLayout = layout) } }
+    }
+
+    /** Rozloženie a počet v riadku naraz (štipnutie v knižnici). */
+    fun setView(layout: LibraryLayout, columns: Int) {
+        viewModelScope.launch {
+            settingsRepo.update { it.copy(libraryLayout = layout, libraryColumns = columns.coerceIn(0, 8)) }
+        }
+    }
+
+    /** Počet skladieb v riadku mriežky (0 = automaticky). */
+    fun setColumns(columns: Int) {
+        viewModelScope.launch { settingsRepo.update { it.copy(libraryColumns = columns.coerceIn(0, 8)) } }
+    }
+
     // ---- import ----
 
     /**
@@ -322,12 +444,15 @@ class LibraryViewModel(
             var ok = 0
             var failed = 0
             var firstId: Long? = null
+            val plainPdfs = ArrayList<Long>()
             for (uri in uris) {
                 // balík .crescendo (skladba aj s poznámkami) alebo obyčajné PDF
-                (if (library.isPackage(uri)) library.importPackage(uri, target) else library.importPdf(uri, target))
+                val pkg = library.isPackage(uri)
+                (if (pkg) library.importPackage(uri, target) else library.importPdf(uri, target))
                     .onSuccess { id ->
                         ok++
                         if (firstId == null) firstId = id
+                        if (!pkg) plainPdfs.add(id)
                     }
                     .onFailure { failed++ }
             }
@@ -339,11 +464,16 @@ class LibraryViewModel(
                 else -> say(app.getString(R.string.msg_import_failed), error = true)
             }
             firstId?.let { onFirstImported?.invoke(it) }
+            // názov a skladateľ z prvej strany (len obyčajné PDF; balík má údaje so sebou)
+            recognizeAfterImport(plainPdfs)
         }
     }
 
-    /** Import naskenovaného PDF (zo skenera) s vlastným názvom do aktuálneho priečinka. */
-    fun importScan(uri: Uri, title: String, onImported: (Long) -> Unit = {}) {
+    /**
+     * Import naskenovaného PDF (zo skenera) s vlastným názvom do aktuálneho priečinka.
+     * [composer] = skladateľ rozpoznaný z prvej strany (inak sa skúsi rozpoznať po importe).
+     */
+    fun importScan(uri: Uri, title: String, composer: String? = null, onImported: (Long) -> Unit = {}) {
         if (!(app as CrescendoApp).pro.allowNewPieces()) return
         val target = state.value.currentFolder?.id
         viewModelScope.launch {
@@ -351,6 +481,11 @@ class LibraryViewModel(
             library.importPdf(uri, target, title.trim())
                 .onSuccess { id ->
                     say(app.getString(R.string.msg_piece_added))
+                    if (composer != null) {
+                        library.getPiece(id)?.let { library.updateDetails(it.copy(composer = composer)) }
+                    } else {
+                        recognizeAfterImport(listOf(id))
+                    }
                     onImported(id)
                 }
                 .onFailure { say(app.getString(R.string.msg_import_failed), error = true) }

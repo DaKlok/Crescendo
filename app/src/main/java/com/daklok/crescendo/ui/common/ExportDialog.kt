@@ -157,7 +157,7 @@ fun ExportPdfDialog(request: ExportRequest, onDismiss: () -> Unit, initialFormat
         onDismissRequest = { if (p == null) onDismiss() },
         properties = DialogProperties(dismissOnClickOutside = p == null, dismissOnBackPress = p == null),
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.IosShare, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.IosShare, com.daklok.crescendo.ui.common.ExpressiveShapes.Cookie12) },
         title = { Text(stringResource(R.string.export_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -211,7 +211,6 @@ fun ExportPdfDialog(request: ExportRequest, onDismiss: () -> Unit, initialFormat
                                 val name = PdfExporter.safeFileName(request.title) + "." + format.ext
                                 if (format == ExportFormat.PDF) pdfSaver.launch(name) else pkgSaver.launch(name)
                             },
-                            shape = RoundedCornerShape(16.dp),
                             modifier = m,
                         ) {
                             Icon(Icons.Outlined.SaveAlt, null, Modifier.size(18.dp))
@@ -220,7 +219,6 @@ fun ExportPdfDialog(request: ExportRequest, onDismiss: () -> Unit, initialFormat
                         }
                         FilledTonalButton(
                             onClick = { share() },
-                            shape = RoundedCornerShape(16.dp),
                             modifier = m,
                         ) {
                             Icon(Icons.Outlined.IosShare, null, Modifier.size(18.dp))

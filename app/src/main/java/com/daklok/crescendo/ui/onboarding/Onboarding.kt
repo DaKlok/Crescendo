@@ -1,5 +1,11 @@
 package com.daklok.crescendo.ui.onboarding
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import com.daklok.crescendo.ui.common.Accent
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.colors
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -20,7 +26,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.CloudSync
@@ -45,17 +50,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.daklok.crescendo.R
 import com.daklok.crescendo.ui.common.AppMark
-import com.daklok.crescendo.ui.common.IconBadge
 import com.daklok.crescendo.ui.common.Motion
 import kotlinx.coroutines.launch
 
-private class OnboardingPage(val icon: ImageVector, val title: Int, val text: Int)
+/** Strana sprievodcu: ikona, nadpis, text a výrazný tvar v pozadí (každá strana iný). */
+private class OnboardingPage(val icon: ImageVector, val title: Int, val text: Int, val back: Shape, val accent: Accent)
 
 private val PAGES = listOf(
-    OnboardingPage(Icons.Outlined.LibraryMusic, R.string.ob_library_title, R.string.ob_library_text),
-    OnboardingPage(Icons.Outlined.SwapHoriz, R.string.ob_turn_title, R.string.ob_turn_text),
-    OnboardingPage(Icons.Outlined.Draw, R.string.ob_notes_title, R.string.ob_notes_text),
-    OnboardingPage(Icons.Outlined.CloudSync, R.string.ob_backup_title, R.string.ob_backup_text),
+    OnboardingPage(Icons.Outlined.LibraryMusic, R.string.ob_library_title, R.string.ob_library_text, ExpressiveShapes.Clover, Accent.Tertiary),
+    OnboardingPage(Icons.Outlined.SwapHoriz, R.string.ob_turn_title, R.string.ob_turn_text, ExpressiveShapes.Squircle, Accent.Secondary),
+    OnboardingPage(Icons.Outlined.Draw, R.string.ob_notes_title, R.string.ob_notes_text, ExpressiveShapes.Cookie, Accent.Tertiary),
+    OnboardingPage(Icons.Outlined.CloudSync, R.string.ob_backup_title, R.string.ob_backup_text, ExpressiveShapes.Clover, Accent.Secondary),
 )
 
 /** Úvodný sprievodca pri prvom spustení – štyri krátke strany, dá sa preskočiť. */
@@ -87,12 +92,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
                             .widthIn(max = 520.dp)
                             .padding(horizontal = 8.dp),
                     ) {
-                        IconBadge(page.icon, active = true, size = 104.dp)
-                        Spacer(Modifier.height(32.dp))
+                        // tvary sa pri posúvaní strán pootáčajú (každý iným smerom)
+                        PageArt(page) { (pager.currentPage - i) + pager.currentPageOffsetFraction }
+                        Spacer(Modifier.height(36.dp))
                         Text(
                             stringResource(page.title),
                             style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                         )
                         Spacer(Modifier.height(12.dp))
@@ -125,15 +130,46 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     onClick = {
                         if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                     },
-                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(start = 24.dp, end = if (last) 24.dp else 20.dp, top = 16.dp, bottom = 16.dp),
                 ) {
-                    Text(stringResource(if (last) R.string.ob_start else R.string.ob_next))
+                    Text(stringResource(if (last) R.string.ob_start else R.string.ob_next), style = MaterialTheme.typography.titleMedium)
                     if (!last) {
                         Spacer(Modifier.width(8.dp))
-                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(20.dp))
                     }
                 }
             }
+        }
+    }
+}
+
+/** Zložené výrazné tvary strany; [offset] = posun strany (pri potiahnutí sa tvary pootáčajú). */
+@Composable
+private fun PageArt(page: OnboardingPage, offset: () -> Float) {
+    val scheme = MaterialTheme.colorScheme
+    val c = page.accent.colors()
+    Box(Modifier.size(224.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(212.dp)
+                .graphicsLayer { rotationZ = 14f + offset() * 70f }
+                .background(c.container, page.back),
+        )
+        Box(
+            Modifier
+                .size(134.dp)
+                .graphicsLayer { rotationZ = -offset() * 40f }
+                .background(scheme.primary, ExpressiveShapes.Cookie12),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                page.icon,
+                contentDescription = null,
+                tint = scheme.onPrimary,
+                modifier = Modifier
+                    .size(60.dp)
+                    .graphicsLayer { rotationZ = offset() * 40f },
+            )
         }
     }
 }

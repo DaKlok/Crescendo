@@ -26,7 +26,6 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Headphones
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Piano
@@ -207,7 +206,7 @@ internal fun StorageSettingsContent() {
         g.filter { it.entries.isNotEmpty() }.forEach { grp ->
             val open = expanded == grp.kind
             Surface(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = scheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth().animateContentSize(),
             ) {
@@ -220,7 +219,7 @@ internal fun StorageSettingsContent() {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
-                            Modifier.size(40.dp).background(kindColor(grp.kind).copy(alpha = 0.18f), CircleShape),
+                            Modifier.size(42.dp).background(kindColor(grp.kind).copy(alpha = 0.18f), com.daklok.crescendo.ui.common.ExpressiveShapes.Cookie),
                             contentAlignment = Alignment.Center,
                         ) { Icon(kindIcon(grp.kind), null, Modifier.size(20.dp), tint = kindColor(grp.kind).copy(alpha = 1f)) }
                         Spacer(Modifier.width(12.dp))
@@ -254,7 +253,6 @@ internal fun StorageSettingsContent() {
                                             Unit
                                         }
                                     },
-                                    shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.padding(bottom = 6.dp),
                                 ) {
                                     Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
@@ -298,7 +296,7 @@ internal fun StorageSettingsContent() {
         AlertDialog(
             onDismissRequest = { confirm = null },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Delete, null) },
+            icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Delete, destructive = true) },
             title = { Text(stringResource(R.string.storage_delete_title)) },
             text = { Text(what) },
             confirmButton = {

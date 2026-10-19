@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.AutoAwesome
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -43,8 +45,13 @@ fun PieceDetailsDialog(
     allTags: List<String>,
     onSave: (PieceEntity) -> Unit,
     onDismiss: () -> Unit,
+    /** Prečíta prvú stranu a vráti rozpoznaný názov a skladateľa. */
+    onRecognize: (suspend () -> com.daklok.crescendo.data.TitleRecognizer.Result?)? = null,
 ) {
     var title by remember { mutableStateOf(piece.title) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    /** 0 = nič, 1 = číta sa, 2 = nič sa nenašlo. */
+    var recognizing by remember { mutableIntStateOf(0) }
     var composer by remember { mutableStateOf(piece.composer) }
     var key by remember { mutableStateOf(piece.keySignature) }
     var instrument by remember { mutableStateOf(piece.instrument) }
@@ -71,6 +78,42 @@ fun PieceDetailsDialog(
             ) {
                 Field(stringResource(R.string.field_title), title) { title = it }
                 Field(stringResource(R.string.field_composer), composer) { composer = it }
+                if (onRecognize != null) {
+                    // názov a skladateľ z prvej strany (ML Kit, v zariadení)
+                    androidx.compose.material3.AssistChip(
+                        onClick = {
+                            if (recognizing == 1) return@AssistChip
+                            recognizing = 1
+                            scope.launch {
+                                val r = onRecognize()
+                                if (r == null) {
+                                    recognizing = 2
+                                } else {
+                                    r.title?.let { title = it }
+                                    r.composer?.let { composer = it }
+                                    recognizing = 0
+                                }
+                            }
+                        },
+                        label = {
+                            Text(
+                                when (recognizing) {
+                                    1 -> stringResource(R.string.recognize_running)
+                                    2 -> stringResource(R.string.recognize_nothing)
+                                    else -> stringResource(R.string.recognize_from_page)
+                                },
+                            )
+                        },
+                        leadingIcon = {
+                            if (recognizing == 1) {
+                                androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(18.dp))
+                            }
+                        },
+                        shape = RoundedCornerShape(50),
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Field(stringResource(R.string.field_key), key, Modifier.weight(1f)) { key = it }
                     Field(stringResource(R.string.field_instrument), instrument, Modifier.weight(1f)) { instrument = it }
@@ -96,7 +139,7 @@ fun PieceDetailsDialog(
                             selected = t in tags,
                             onClick = { tags = if (t in tags) tags - t else tags + t },
                             label = { Text(t) },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(50),
                         )
                     }
                 }

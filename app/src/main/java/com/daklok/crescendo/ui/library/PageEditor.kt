@@ -1,5 +1,11 @@
 package com.daklok.crescendo.ui.library
 
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
+import com.daklok.crescendo.ui.common.Accent
+import com.daklok.crescendo.ui.common.DialogIcon
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.ScreenTopBar
+import com.daklok.crescendo.ui.reader.ToolButton
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,7 +47,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -98,20 +103,17 @@ fun PageEditorDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) } },
-                    title = {
-                        Column {
-                            Text(stringResource(R.string.edit_pages), fontWeight = FontWeight.Bold)
-                            Text(piece.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
+                ScreenTopBar(
+                    title = stringResource(R.string.edit_pages),
+                    subtitle = piece.title,
+                    onBack = onDismiss,
+                    navigationIcon = Icons.Outlined.Close,
+                    navigationDescription = stringResource(R.string.close),
                     actions = {
                         Button(
                             onClick = { onSave(pages.filter { !it.removed }.map { it.index to it.rotation }) },
                             enabled = remaining > 0,
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.padding(end = 12.dp),
+                            contentPadding = PaddingValues(horizontal = 22.dp),
                         ) { Text(stringResource(R.string.save)) }
                     },
                 )
@@ -168,7 +170,7 @@ private fun PageTile(
     }
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(Modifier.padding(8.dp)) {
@@ -176,7 +178,7 @@ private fun PageTile(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.75f)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                     .alpha(if (page.removed) 0.3f else 1f),
                 contentAlignment = Alignment.Center,
@@ -192,36 +194,59 @@ private fun PageTile(
                             .background(Color.White),
                     )
                 } ?: CircularProgressIndicator(Modifier.size(28.dp))
-                Text(
-                    "${position + 1}",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
+                // poradie strany vo vlnitom kruhu
+                Box(
+                    Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onLeft, enabled = canLeft, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.move_up), Modifier.size(20.dp))
-                }
-                IconButton(onClick = { page.rotation = (page.rotation + 90) % 360 }, enabled = !page.removed, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Outlined.Rotate90DegreesCw, stringResource(R.string.rotate), Modifier.size(20.dp))
-                }
-                IconButton(onClick = { page.removed = !page.removed }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (page.removed) Icons.Outlined.RestoreFromTrash else Icons.Outlined.Delete,
-                        stringResource(R.string.delete),
-                        Modifier.size(20.dp),
-                        tint = if (page.removed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        .size(30.dp)
+                        .background(MaterialTheme.colorScheme.primary, ExpressiveShapes.Cookie),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${position + 1}",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
-                IconButton(onClick = onRight, enabled = canRight, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, stringResource(R.string.move_down), Modifier.size(20.dp))
-                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+            ) {
+                ToolButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    description = stringResource(R.string.move_up),
+                    onClick = onLeft,
+                    enabled = canLeft,
+                    size = 36.dp,
+                )
+                ToolButton(
+                    icon = Icons.Outlined.Rotate90DegreesCw,
+                    description = stringResource(R.string.rotate),
+                    onClick = { page.rotation = (page.rotation + 90) % 360 },
+                    enabled = !page.removed,
+                    size = 36.dp,
+                )
+                // odstránená strana: tlačidlo sa zvýrazní a ponúkne obnovenie
+                ToolButton(
+                    icon = if (page.removed) Icons.Outlined.RestoreFromTrash else Icons.Outlined.Delete,
+                    description = stringResource(R.string.delete),
+                    onClick = { page.removed = !page.removed },
+                    active = page.removed,
+                    size = 36.dp,
+                )
+                ToolButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                    description = stringResource(R.string.move_down),
+                    onClick = onRight,
+                    enabled = canRight,
+                    size = 36.dp,
+                )
             }
         }
     }
@@ -263,6 +288,7 @@ fun SplitDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
+        icon = { DialogIcon(Icons.AutoMirrored.Outlined.CallSplit, ExpressiveShapes.Squircle, Accent.Secondary) },
         title = { Text(stringResource(R.string.split_piece)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -279,7 +305,7 @@ fun SplitDialog(
                                 onValueChange = { p.name = it.take(80) },
                                 singleLine = true,
                                 label = { Text(stringResource(R.string.field_title)) },
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f),
                             )
                             NumberField(p.from, stringResource(R.string.split_from)) { p.from = it }
@@ -323,7 +349,7 @@ private fun NumberField(value: String, label: String, onChange: (String) -> Unit
         singleLine = true,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.width(76.dp),
     )
 }

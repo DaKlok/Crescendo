@@ -49,6 +49,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Crescendo">
 
+        <!-- model na čítanie textu (názov a skladateľ pri importe) sa stiahne hneď po inštalácii -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"

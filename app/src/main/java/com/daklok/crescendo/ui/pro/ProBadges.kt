@@ -16,16 +16,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Prechod farieb Pro (primárna → terciárna) – rovnaký všade, kde sa Pro ukazuje. */
+/**
+ * Prechod farieb Pro (primárna do terciárnej), rovnaký všade, kde sa Pro ukazuje. Text na ňom je biely,
+ * preto v tmavej téme (kde sú primárna a terciárna svetlé) berie tmavšie kontajnerové farby.
+ */
 @Composable
-fun proBrush(): Brush = Brush.linearGradient(
-    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary),
-)
+fun proBrush(): Brush {
+    val s = MaterialTheme.colorScheme
+    return Brush.linearGradient(
+        if (proDark()) listOf(s.primaryContainer, s.tertiaryContainer) else listOf(s.primary, s.tertiary),
+    )
+}
+
+/** Tmavá téma pre farby Pro: primárna farba je svetlá. */
+@Composable
+fun proDark(): Boolean = MaterialTheme.colorScheme.primary.luminance() > 0.5f
+
+/** Farba textu na bielom tlačidle v karte Pro (čitateľná vo svetlej aj tmavej téme). */
+@Composable
+fun proOnWhite(): Color = if (proDark()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
 
 /** Štítok „PRO“ – pri položkách menu, nastaveniach a funkciách, ktoré sú v Pro. */
 @Composable

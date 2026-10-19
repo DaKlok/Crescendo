@@ -49,6 +49,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -171,8 +173,20 @@ fun TonalIconButton(
         animationSpec = tween(220),
         label = "tonalContent",
     )
+    // Material 3 Expressive: tvar reaguje – zapnuté = zaoblený štvorec, stlačené = mierne „stlačí“ rohy
+    val pressed by interaction.collectIsPressedAsState()
+    val corner by androidx.compose.animation.core.animateIntAsState(
+        targetValue = when {
+            highlighted -> 30
+            pressed -> 36
+            else -> 50
+        },
+        animationSpec = Motion.bouncy(),
+        label = "tonalShape",
+    )
     Box(modifier) {
         FilledIconButton(
+            shape = RoundedCornerShape(percent = corner),
             onClick = {
                 haptic(HapticFeedbackType.TextHandleMove)
                 onClick()
@@ -199,22 +213,23 @@ fun TonalIconButton(
     }
 }
 
-/** Ikona v zaoblenom štvorčeku; farebná keď je [active]. */
+/** Ikona vo vlnitom kruhu (Material 3 Expressive „cookie“); tónovaná farbou témy, keď je [active]. */
 @Composable
 fun IconBadge(
     icon: ImageVector,
     active: Boolean = true,
     size: Dp = 46.dp,
     modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = ExpressiveShapes.Cookie,
 ) {
     val bg by androidx.compose.animation.animateColorAsState(
-        targetValue = if (active) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+        targetValue = if (active) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
         animationSpec = tween(260),
         label = "badgeBg",
     )
     val fg by androidx.compose.animation.animateColorAsState(
-        targetValue = if (active) MaterialTheme.colorScheme.onPrimary
+        targetValue = if (active) MaterialTheme.colorScheme.onPrimaryContainer
         else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = tween(260),
         label = "badgeFg",
@@ -222,7 +237,7 @@ fun IconBadge(
     Box(
         modifier = modifier
             .size(size)
-            .background(bg, RoundedCornerShape(size * 0.3f)),
+            .background(bg, shape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(size * 0.5f))
@@ -231,18 +246,19 @@ fun IconBadge(
 
 // ───────────────────────── Nastavenia ─────────────────────────
 
+/** Nadpis sekcie: ikona témy a výrazný názov (Material 3 Expressive). */
 @Composable
 fun SectionHeader(icon: ImageVector, title: String, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.padding(bottom = 8.dp, top = 4.dp, start = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier.padding(bottom = 10.dp, top = 8.dp, start = 4.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
         )
     }
@@ -251,11 +267,11 @@ fun SectionHeader(icon: ImageVector, title: String, modifier: Modifier = Modifie
 @Composable
 fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(16.dp), content = content)
+        Column(modifier = Modifier.padding(18.dp), content = content)
     }
 }
 
@@ -301,7 +317,7 @@ fun SettingSwitchRow(
                 )
             }
         }
-        Switch(
+        ExpressiveSwitch(
             checked = checked,
             enabled = enabled,
             onCheckedChange = {
@@ -310,6 +326,27 @@ fun SettingSwitchRow(
             },
         )
     }
+}
+
+/** Prepínač Material 3 Expressive: zapnutý má v palci fajku. */
+@Composable
+fun ExpressiveSwitch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = modifier,
+        enabled = enabled,
+        thumbContent = if (checked) {
+            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+        } else {
+            null
+        },
+    )
 }
 
 /** Posuvník s ikonou, hodnotou a tlačidlom na návrat k predvolenej hodnote. */
@@ -384,7 +421,14 @@ fun EnhancedSlider(
 
 enum class NotificationType { SUCCESS, INFO, ERROR }
 
-data class AppNotification(val message: String, val type: NotificationType, val id: Long = System.nanoTime())
+data class AppNotification(
+    val message: String,
+    val type: NotificationType,
+    val id: Long = System.nanoTime(),
+    /** Voliteľná akcia (napr. „Späť“). */
+    val actionLabel: String? = null,
+    val onAction: (() -> Unit)? = null,
+)
 
 /** Krátke plávajúce hlásenie dole uprostred (namiesto snackbaru). */
 @Stable
@@ -393,13 +437,24 @@ class Notifier(private val scope: CoroutineScope) {
         private set
     private var job: Job? = null
 
-    fun show(message: String, type: NotificationType = NotificationType.INFO) {
+    fun show(
+        message: String,
+        type: NotificationType = NotificationType.INFO,
+        actionLabel: String? = null,
+        onAction: (() -> Unit)? = null,
+    ) {
         job?.cancel()
-        current = AppNotification(message, type)
+        current = AppNotification(message, type, actionLabel = actionLabel, onAction = onAction)
         job = scope.launch {
-            delay(2600)
+            // s akciou dlhšie, aby sa na ňu dalo ťuknúť
+            delay(if (onAction != null) 5500 else 2600)
             current = null
         }
+    }
+
+    fun dismiss() {
+        job?.cancel()
+        current = null
     }
 }
 
@@ -453,7 +508,23 @@ fun NotificationHost(notifier: Notifier, modifier: Modifier = Modifier) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
-                    Text(n.message, style = MaterialTheme.typography.labelLarge, color = content)
+                    Text(
+                        n.message,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = content,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (n.actionLabel != null && n.onAction != null) {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                n.onAction.invoke()
+                                notifier.dismiss()
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                        ) {
+                            Text(n.actionLabel, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
             }
         }

@@ -1,7 +1,28 @@
 package com.daklok.crescendo.ui.stats
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.Button
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import com.daklok.crescendo.ui.common.Accent
+import com.daklok.crescendo.ui.common.ConnectedChoice
+import com.daklok.crescendo.ui.common.DialogIcon
+import com.daklok.crescendo.ui.common.ExpressiveSwitch
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.ScreenTopBar
+import com.daklok.crescendo.ui.common.ShapeIcon
+import com.daklok.crescendo.ui.common.WavyRing
+import com.daklok.crescendo.ui.common.colors
+import com.daklok.crescendo.ui.common.decoShape
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -9,7 +30,6 @@ import androidx.compose.animation.animateContentSize
 import com.daklok.crescendo.data.PracticeReminder
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TimeInput
-import androidx.compose.material3.Switch
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,56 +49,37 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Notes
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,7 +98,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -106,7 +106,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,23 +115,19 @@ import com.daklok.crescendo.R
 import com.daklok.crescendo.data.PieceEntity
 import com.daklok.crescendo.data.PracticeGoal
 import com.daklok.crescendo.data.PracticeSessionEntity
-import com.daklok.crescendo.ui.common.IconBadge
 import com.daklok.crescendo.ui.common.Motion
 import com.daklok.crescendo.ui.common.SectionHeader
 import com.daklok.crescendo.ui.common.TonalIconButton
 import com.daklok.crescendo.ui.common.isCompactWidth
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
-import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -159,11 +154,14 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val sessions by remember { app.practice.observeAll() }.collectAsStateWithLifecycle(emptyList())
     val pieces by remember { app.library.observePieces() }.collectAsStateWithLifecycle(emptyList())
+    val allSpots by remember { app.spots.observeAll() }.collectAsStateWithLifecycle(emptyList())
+    /** Týždeň v súhrne: 0 = tento, 1 = minulý… */
+    var weekBack by rememberSaveable { mutableIntStateOf(1) }
     BackHandler(onBack = onBack)
 
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
-    val firstDow = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+    val firstDow = com.daklok.crescendo.data.WeeklySummary.firstDayOfWeek()
     fun dayOf(s: PracticeSessionEntity): LocalDate = Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalDate()
 
     val byDay = remember(sessions) { sessions.groupBy { dayOf(it) } }
@@ -209,33 +207,24 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    TonalIconButton(
-                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                        onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                },
-                title = { Text(stringResource(R.string.practice), fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp)) },
+            ScreenTopBar(
+                title = stringResource(R.string.practice),
+                onBack = onBack,
                 actions = {
                     TonalIconButton(
                         icon = if (reminderOn) Icons.Outlined.NotificationsActive else Icons.Outlined.NotificationsNone,
                         contentDescription = stringResource(R.string.reminder_title),
                         highlighted = reminderOn,
                         onClick = { reminderOpen = true },
-                        modifier = Modifier.padding(end = 8.dp),
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
     ) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(top = padding.calculateTopPadding() + 8.dp)
+                .padding(top = padding.calculateTopPadding() + 4.dp)
                 .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -243,28 +232,11 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (compact) 12.dp else 24.dp, vertical = 24.dp),
+                    .padding(start = if (compact) 12.dp else 24.dp, end = if (compact) 12.dp else 24.dp, top = 20.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (sessions.isEmpty()) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        IconBadge(Icons.Outlined.Schedule, active = true, size = 88.dp)
-                        Spacer(Modifier.height(20.dp))
-                        Text(stringResource(R.string.practice_empty_title), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            stringResource(R.string.practice_empty_text),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 480.dp),
-                        )
-                    }
+                    PracticeEmpty()
                 } else {
                     // ── dnes + čísla ──
                     val todayCard: @Composable (Modifier) -> Unit = { m ->
@@ -279,15 +251,38 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                     val stats: @Composable (Modifier) -> Unit = { m ->
                         Column(m, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                StatCard(Icons.Outlined.CalendarMonth, stringResource(R.string.practice_week), formatDuration(weekSec), Modifier.weight(1f))
-                                StatCard(Icons.Outlined.EmojiEvents, stringResource(R.string.practice_best_streak), pluralDays(bestStreak), Modifier.weight(1f))
+                                StatCard(
+                                    Icons.Outlined.CalendarMonth,
+                                    stringResource(R.string.practice_week),
+                                    formatDuration(weekSec),
+                                    ExpressiveShapes.Cookie,
+                                    Accent.Primary,
+                                    Modifier.weight(1f),
+                                )
+                                StatCard(
+                                    Icons.Outlined.EmojiEvents,
+                                    stringResource(R.string.practice_best_streak),
+                                    pluralDays(bestStreak),
+                                    ExpressiveShapes.Clover,
+                                    Accent.Tertiary,
+                                    Modifier.weight(1f),
+                                )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                StatCard(Icons.Outlined.Schedule, stringResource(R.string.practice_total), formatDuration(totalSec), Modifier.weight(1f))
+                                StatCard(
+                                    Icons.Outlined.Schedule,
+                                    stringResource(R.string.practice_total),
+                                    formatDuration(totalSec),
+                                    ExpressiveShapes.Squircle,
+                                    Accent.Secondary,
+                                    Modifier.weight(1f),
+                                )
                                 StatCard(
                                     Icons.Outlined.MusicNote,
                                     stringResource(R.string.practice_pieces_count),
                                     sessions.map { it.pieceId }.distinct().count { it in pieceById }.toString(),
+                                    ExpressiveShapes.Cookie12,
+                                    Accent.Primary,
                                     Modifier.weight(1f),
                                 )
                             }
@@ -297,25 +292,104 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                         todayCard(Modifier.fillMaxWidth())
                         stats(Modifier.fillMaxWidth())
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            todayCard(Modifier.weight(1f))
+                        // karta dneška rovnako vysoká ako štyri čísla vedľa nej
+                        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            todayCard(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
                             stats(Modifier.weight(1f))
                         }
                     }
 
-                    // ── graf: týždeň / mesiac ──
-                    PeriodChart(
-                        perDay = perDay,
-                        today = today,
-                        firstDow = firstDow,
+                    // ── týždeň v skratke (dá sa listovať) ──
+                    val firstSession = remember(sessions) { sessions.minOfOrNull { it.startedAt } }
+                    val oldestBack = remember(firstSession, weekStart) {
+                        firstSession?.let {
+                            val first = com.daklok.crescendo.data.WeeklySummary.weekStart(Instant.ofEpochMilli(it).atZone(zone).toLocalDate())
+                            java.time.temporal.ChronoUnit.WEEKS.between(first, weekStart).toInt().coerceAtLeast(0)
+                        } ?: 0
+                    }
+                    // minulý týždeň bez cvičenia: súhrn začne tým aktuálnym
+                    var weekChecked by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(sessions.isNotEmpty()) {
+                        if (sessions.isNotEmpty() && !weekChecked) {
+                            weekChecked = true
+                            val last = com.daklok.crescendo.data.WeeklySummary.compute(sessions, weekStart.minusWeeks(1), goalSec, zone, today)
+                            if (last.totalSec <= 0) weekBack = 0
+                        }
+                    }
+                    val shownStart = weekStart.minusWeeks(weekBack.toLong())
+                    val weekSummary = remember(sessions, shownStart, goalSec) {
+                        com.daklok.crescendo.data.WeeklySummary.compute(sessions, shownStart, goalSec, zone, today)
+                    }
+                    WeeklyCard(
+                        summary = weekSummary,
+                        topTitle = weekSummary.topPieceId?.let { pieceById[it]?.title },
+                        title = when (weekBack) {
+                            0 -> stringResource(R.string.practice_week)
+                            1 -> stringResource(R.string.weekly_title_last)
+                            else -> stringResource(R.string.weekly_title_week)
+                        },
                         goalSec = goalSec,
-                        selected = selectedDay,
-                        onSelect = { selectedEpoch = it.toEpochDay(); dayOpen = true },
+                        today = today,
+                        onPrev = if (weekBack < oldestBack) ({ weekBack += 1 }) else null,
+                        onNext = if (weekBack > 0) ({ weekBack -= 1 }) else null,
                     )
 
-                    // ── odznaky ──
+                    // ── na precvičenie: otvorené úseky zo všetkých skladieb ──
+                    val openSpots = remember(allSpots, pieceById) {
+                        allSpots.filter { !it.done && it.pieceId in pieceById }
+                            .sortedWith(compareBy({ it.lastPracticedAt != 0L }, { it.lastPracticedAt }))
+                    }
+                    if (openSpots.isNotEmpty()) {
+                        SectionHeader(Icons.Outlined.Flag, stringResource(R.string.spots_title), Modifier.padding(top = 4.dp))
+                        SpotsList(
+                            spots = openSpots,
+                            pieceById = pieceById,
+                            onOpen = { spot ->
+                                // otvorí skladbu rovno na strane úseku
+                                scope.launch {
+                                    app.library.saveProgress(spot.pieceId, spot.page)
+                                    onOpenPiece(spot.pieceId)
+                                }
+                            },
+                        )
+                    }
+
+                    // ── graf (týždeň / mesiac) a odznaky; na širokej obrazovke vedľa seba ──
                     val badgeStats = remember(sessions, goalMin, bestStreak) { badgeStats(sessions, goalMin, bestStreak, zone) }
-                    BadgesSection(badgeStats)
+                    val chart: @Composable (Modifier) -> Unit = { m ->
+                        PeriodChart(
+                            perDay = perDay,
+                            today = today,
+                            firstDow = firstDow,
+                            goalSec = goalSec,
+                            selected = selectedDay,
+                            onSelect = { selectedEpoch = it.toEpochDay(); dayOpen = true },
+                            modifier = m,
+                        )
+                    }
+                    if (compact) {
+                        chart(Modifier.fillMaxWidth())
+                        BadgesSection(badgeStats)
+                    } else {
+                        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            chart(
+                                Modifier
+                                    .weight(1.2f)
+                                    .fillMaxHeight(),
+                            )
+                            BadgesSection(
+                                badgeStats,
+                                columns = 3,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
+                        }
+                    }
 
                     // ── pravidelnosť ──
                     Heatmap(
@@ -337,49 +411,8 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
                             .take(10)
                     }
                     if (top.isNotEmpty()) {
-                        SectionHeader(Icons.Outlined.Schedule, stringResource(R.string.practice_top))
-                        Card(
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        ) {
-                            Column(Modifier.padding(vertical = 8.dp)) {
-                                val max = top.first().value.coerceAtLeast(1)
-                                top.forEach { (id, sec) ->
-                                    Column(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable { detailPiece = id }
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                pieceById[id]?.title ?: "",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            Text(
-                                                formatDuration(sec),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                            Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        Spacer(Modifier.height(6.dp))
-                                        LinearProgressIndicator(
-                                            progress = { sec.toFloat() / max },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(6.dp)
-                                                .clip(RoundedCornerShape(50)),
-                                            drawStopIndicator = {},
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        SectionHeader(Icons.Outlined.Insights, stringResource(R.string.practice_top), Modifier.padding(top = 4.dp))
+                        TopPieces(top = top, pieceById = pieceById, onOpen = { detailPiece = it })
                     }
                 }
             }
@@ -414,8 +447,10 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
         ReminderDialog(
             enabled = reminderOn,
             minuteOfDay = PracticeReminder.minuteOfDay(context),
-            onSave = { on, minute ->
+            weekly = com.daklok.crescendo.data.WeeklySummary.notifyEnabled(context),
+            onSave = { on, minute, weekly ->
                 PracticeReminder.set(context, on, minute)
+                com.daklok.crescendo.data.WeeklySummary.setNotify(context, weekly)
                 reminderOn = on
                 reminderOpen = false
             },
@@ -446,59 +481,98 @@ fun PracticeScreen(onBack: () -> Unit, onOpenPiece: (Long) -> Unit = {}) {
 @Composable
 private fun pluralDays(n: Int): String = pluralStringResource(R.plurals.days, n, n)
 
-/** Dnešok: krúžok s pokrokom k dennému cieľu a séria dní. */
+/** Dnešok: veľký vlnitý krúžok s minútami k dennému cieľu, séria dní a zmena cieľa. */
 @Composable
 private fun TodayCard(todaySec: Long, goalSec: Long, streak: Int, onEditGoal: () -> Unit, modifier: Modifier) {
     val scheme = MaterialTheme.colorScheme
     val progress = (todaySec.toFloat() / goalSec.coerceAtLeast(60)).coerceAtLeast(0f)
+    // krúžok sa pri otvorení naplní od nuly
     val anim = remember { Animatable(0f) }
     LaunchedEffect(progress) { anim.animateTo(progress.coerceAtMost(1f), Motion.gentle()) }
     val done = todaySec >= goalSec
-    Card(
+    val ring by animateColorAsState(if (done) scheme.tertiary else scheme.primary, tween(400), label = "todayRing")
+    Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = scheme.primaryContainer, contentColor = scheme.onPrimaryContainer),
+        shape = RoundedCornerShape(32.dp),
+        color = scheme.primaryContainer,
+        contentColor = scheme.onPrimaryContainer,
     ) {
-        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(124.dp), contentAlignment = Alignment.Center) {
-                val track = scheme.onPrimaryContainer.copy(alpha = 0.14f)
-                val arc = if (done) scheme.tertiary else scheme.primary
-                Canvas(Modifier.size(124.dp)) {
-                    val stroke = 14.dp.toPx()
-                    val inset = stroke / 2
-                    val sz = Size(size.width - stroke, size.height - stroke)
-                    drawArc(track, 0f, 360f, false, Offset(inset, inset), sz, style = Stroke(stroke))
-                    drawArc(arc, -90f, 360f * anim.value, false, Offset(inset, inset), sz, style = Stroke(stroke, cap = StrokeCap.Round))
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("${todaySec / 60}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("/ ${goalSec / 60} min", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            Spacer(Modifier.width(18.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.practice_today), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    if (done) stringResource(R.string.practice_goal_done)
-                    else stringResource(R.string.practice_goal_left, ((goalSec - todaySec + 59) / 60).toInt()),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Surface(shape = RoundedCornerShape(50), color = scheme.surface.copy(alpha = 0.6f)) {
-                    Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.LocalFireDepartment, null, Modifier.size(16.dp), tint = scheme.tertiary)
-                        Spacer(Modifier.width(4.dp))
+        Box(
+            // veľký vlnitý kruh v rohu (ozdoba ako na karte Pokračuj)
+            Modifier.decoShape(
+                shape = ExpressiveShapes.Cookie12,
+                color = scheme.primary.copy(alpha = 0.07f),
+                diameter = 210.dp,
+                alignment = Alignment.TopEnd,
+                offset = DpOffset(64.dp, (-72).dp),
+                turn = { 10f },
+            ),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(136.dp), contentAlignment = Alignment.Center) {
+                    WavyRing(
+                        progress = anim.value,
+                        modifier = Modifier.matchParentSize(),
+                        color = ring,
+                        trackColor = scheme.onPrimaryContainer.copy(alpha = 0.12f),
+                        stroke = 9.dp,
+                        amplitude = 2.2.dp,
+                        wavelength = 22.dp,
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${todaySec / 60}", style = MaterialTheme.typography.displaySmall, maxLines = 1)
                         Text(
-                            stringResource(R.string.practice_streak) + ": " + pluralDays(streak),
+                            stringResource(R.string.practice_of_goal, (goalSec / 60).toInt()),
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onSurface,
+                            color = scheme.onPrimaryContainer.copy(alpha = 0.75f),
+                            maxLines = 1,
                         )
                     }
                 }
-                TextButton(onClick = onEditGoal, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp)) {
-                    Icon(Icons.Outlined.Flag, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.practice_goal_edit))
+                Spacer(Modifier.width(18.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.practice_today), style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        if (done) stringResource(R.string.practice_goal_done)
+                        else stringResource(R.string.practice_goal_left, ((goalSec - todaySec + 59) / 60).toInt()),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Surface(shape = RoundedCornerShape(50), color = scheme.surface.copy(alpha = 0.6f)) {
+                        Row(
+                            Modifier.padding(start = 8.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.LocalFireDepartment, null, Modifier.size(18.dp), tint = scheme.tertiary)
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                stringResource(R.string.practice_streak) + ": " + pluralDays(streak),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = onEditGoal,
+                        shape = RoundedCornerShape(50),
+                        color = scheme.onPrimaryContainer.copy(alpha = 0.08f),
+                    ) {
+                        Row(
+                            Modifier.padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.Flag, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.practice_goal_edit), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        }
+                    }
                 }
             }
         }
@@ -514,6 +588,7 @@ private fun PeriodChart(
     goalSec: Long,
     selected: LocalDate,
     onSelect: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     var month by rememberSaveable { mutableStateOf(false) }
@@ -530,48 +605,58 @@ private fun PeriodChart(
         days.first().format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.titlecase(locale) }
     } else {
         val f = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-        days.first().format(f) + " - " + days.last().format(f)
+        stringResource(R.string.time_range, days.first().format(f), days.last().format(f))
     }
     val periodSec = days.sumOf { perDay[it] ?: 0L }
     val activeDays = days.count { (perDay[it] ?: 0L) > 0L }
+    val weekLabel = stringResource(R.string.practice_tab_week)
+    val monthLabel = stringResource(R.string.practice_tab_month)
 
     Card(
-        shape = RoundedCornerShape(24.dp),
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh),
     ) {
         Column(Modifier.padding(16.dp)) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = !month,
-                    onClick = {
-                        month = false
-                        offset = 0
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text(stringResource(R.string.practice_tab_week)) }
-                SegmentedButton(
-                    selected = month,
-                    onClick = {
-                        month = true
-                        offset = 0
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text(stringResource(R.string.practice_tab_month)) }
-            }
-            Spacer(Modifier.height(10.dp))
+            ConnectedChoice(
+                options = listOf(false, true),
+                selected = month,
+                label = { if (it) monthLabel else weekLabel },
+                onSelect = {
+                    month = it
+                    offset = 0
+                },
+                modifier = Modifier
+                    .widthIn(max = 420.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+            Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { offset-- }) { Icon(Icons.Outlined.ChevronLeft, stringResource(R.string.practice_prev)) }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TonalIconButton(
+                    icon = Icons.Outlined.ChevronLeft,
+                    contentDescription = stringResource(R.string.practice_prev),
+                    onClick = { offset-- },
+                )
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         formatDuration(periodSec) + " · " + stringResource(R.string.practice_active_days, activeDays, days.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = scheme.onSurfaceVariant,
+                        maxLines = 1,
                     )
                 }
-                IconButton(onClick = { offset++ }, enabled = offset < 0) {
-                    Icon(Icons.Outlined.ChevronRight, stringResource(R.string.practice_next))
-                }
+                TonalIconButton(
+                    icon = Icons.Outlined.ChevronRight,
+                    contentDescription = stringResource(R.string.practice_next),
+                    onClick = { offset++ },
+                    enabled = offset < 0,
+                )
             }
             Spacer(Modifier.height(12.dp))
             val maxSec = maxOf(days.maxOf { perDay[it] ?: 0L }, goalSec, 60L)
@@ -594,7 +679,8 @@ private fun PeriodChart(
                     },
             ) {
                 val slot = size.width / days.size
-                val barW = slot * if (month) 0.62f else 0.5f
+                // na širokej obrazovke nie príliš hrubé stĺpce
+                val barW = minOf(slot * if (month) 0.62f else 0.5f, (if (month) 18.dp else 44.dp).toPx())
                 days.forEachIndexed { i, day ->
                     val v = (perDay[day] ?: 0L).toFloat() / maxSec
                     val x = i * slot + (slot - barW) / 2f
@@ -679,13 +765,13 @@ private fun DayCard(
     val title = if (day == today) stringResource(R.string.practice_today)
     else day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL)).replaceFirstChar { it.titlecase(Locale.getDefault()) }
     Card(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh),
     ) {
         Column(Modifier.padding(vertical = 12.dp)) {
-            Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Today, null, Modifier.size(20.dp), tint = scheme.primary)
-                Spacer(Modifier.width(10.dp))
+            Row(Modifier.padding(start = 14.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ShapeIcon(Icons.Outlined.Today, ExpressiveShapes.Cookie12, scheme.primaryContainer, scheme.onPrimaryContainer, 40.dp)
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
@@ -727,7 +813,8 @@ private fun DayCard(
                         Box(
                             Modifier
                                 .size(40.dp)
-                                .background(scheme.secondaryContainer, CircleShape)
+                                .clip(ExpressiveShapes.Cookie)
+                                .background(scheme.secondaryContainer)
                                 .clickable(enabled = piece != null) { onOpenPiece(pieceId) },
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Outlined.MusicNote, null, Modifier.size(20.dp), tint = scheme.onSecondaryContainer) }
@@ -741,22 +828,10 @@ private fun DayCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             // podiel na dnešnom čase
-                            Box(
-                                Modifier
-                                    .padding(top = 6.dp)
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(scheme.surfaceVariant),
-                            ) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth((total.toFloat() / dayTotal).coerceIn(0.03f, 1f))
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(50))
-                                        .background(scheme.primary),
-                                )
-                            }
+                            ShareBar(
+                                fraction = total.toFloat() / dayTotal,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(horizontalAlignment = Alignment.End) {
@@ -858,14 +933,14 @@ private fun Heatmap(
     val selColor = scheme.tertiary
     val active = (0 until weeks * 7).count { (perDay[start.plusDays(it.toLong())] ?: 0L) > 0L }
     Card(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.GridView, null, Modifier.size(18.dp), tint = scheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.practice_consistency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Icon(Icons.Outlined.GridView, null, Modifier.size(20.dp), tint = scheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Text(stringResource(R.string.practice_consistency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
                     stringResource(R.string.practice_active_days, active, weeks * 7),
                     style = MaterialTheme.typography.labelMedium,
@@ -897,9 +972,9 @@ private fun Heatmap(
                     val c = colors[level(perDay[day] ?: 0L)]
                     val o = Offset(w * cell + gap / 2, d * cell + gap / 2)
                     val s = Size(cell - gap, cell - gap)
-                    drawRoundRect(c, o, s, CornerRadius(s.width * 0.28f))
+                    drawRoundRect(c, o, s, CornerRadius(s.width * 0.34f))
                     if (day == selected) {
-                        drawRoundRect(selColor, o, s, CornerRadius(s.width * 0.28f), style = Stroke(2.dp.toPx()))
+                        drawRoundRect(selColor, o, s, CornerRadius(s.width * 0.34f), style = Stroke(2.dp.toPx()))
                     }
                 }
             }
@@ -912,7 +987,7 @@ private fun Heatmap(
                         Modifier
                             .padding(horizontal = 2.dp)
                             .size(12.dp)
-                            .background(c, RoundedCornerShape(3.dp)),
+                            .background(c, RoundedCornerShape(4.dp)),
                     )
                 }
                 Spacer(Modifier.width(6.dp))
@@ -922,20 +997,28 @@ private fun Heatmap(
     }
 }
 
+/** Číslo s ikonou vo výraznom tvare (každé číslo má svoj tvar a farbu). */
 @Composable
-private fun StatCard(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
+private fun StatCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    shape: Shape,
+    accent: Accent,
+    modifier: Modifier = Modifier,
+) {
+    val c = accent.colors()
+    Surface(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(10.dp))
+        Column(Modifier.padding(14.dp)) {
+            ShapeIcon(icon = icon, shape = shape, container = c.container, content = c.onContainer, size = 40.dp)
+            Spacer(Modifier.height(12.dp))
             Text(
                 value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                style = if (isCompactWidth()) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -950,12 +1033,220 @@ private fun StatCard(icon: ImageVector, label: String, value: String, modifier: 
     }
 }
 
-/** Denný cieľ: posuvník 5–180 min a rýchle voľby. */
+/** Najviac cvičené skladby: poradie vo výraznom tvare, čas a podiel ako pruh. */
+@Composable
+private fun TopPieces(top: List<Map.Entry<Long, Long>>, pieceById: Map<Long, PieceEntity>, onOpen: (Long) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(28.dp), color = scheme.surfaceContainerHigh) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            val max = top.first().value.coerceAtLeast(1)
+            top.forEachIndexed { i, (id, sec) ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen(id) }
+                        .padding(start = 14.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RankBadge(i + 1)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                pieceById[id]?.title ?: "",
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                formatDuration(sec),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        ShareBar(
+                            fraction = sec.toFloat() / max,
+                            modifier = Modifier.padding(top = 7.dp),
+                            color = if (i == 0) scheme.primary else scheme.primary.copy(alpha = 0.7f),
+                        )
+                    }
+                    Icon(
+                        Icons.Outlined.ChevronRight,
+                        null,
+                        Modifier
+                            .padding(start = 4.dp)
+                            .size(20.dp),
+                        tint = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Úseky na precvičenie zo všetkých skladieb: najdlhšie necvičené hore. Ťuk otvorí skladbu na strane úseku.
+ */
+@Composable
+private fun SpotsList(
+    spots: List<com.daklok.crescendo.data.PracticeSpotEntity>,
+    pieceById: Map<Long, PieceEntity>,
+    onOpen: (com.daklok.crescendo.data.PracticeSpotEntity) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    var all by rememberSaveable { mutableStateOf(false) }
+    val shown = if (all) spots else spots.take(6)
+    val now = System.currentTimeMillis()
+    Surface(shape = RoundedCornerShape(28.dp), color = scheme.surfaceContainerHigh) {
+        Column(Modifier.padding(vertical = 8.dp).animateContentSize()) {
+            shown.forEachIndexed { i, spot ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen(spot) }
+                        .padding(start = 14.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ShapeIcon(
+                        Icons.Outlined.Flag,
+                        if (i % 2 == 0) ExpressiveShapes.Cookie else ExpressiveShapes.Clover,
+                        scheme.tertiaryContainer,
+                        scheme.onTertiaryContainer,
+                        36.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            spot.name.ifBlank { stringResource(R.string.spot_on_page, spot.page + 1) },
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val last = if (spot.lastPracticedAt > 0) {
+                            android.text.format.DateUtils.getRelativeTimeSpanString(
+                                spot.lastPracticedAt, now, android.text.format.DateUtils.DAY_IN_MILLIS,
+                            ).toString()
+                        } else {
+                            stringResource(R.string.spot_never)
+                        }
+                        Text(
+                            listOf(
+                                pieceById[spot.pieceId]?.title.orEmpty(),
+                                stringResource(R.string.bookmark_page, spot.page + 1),
+                                "${spot.reps}×",
+                                last,
+                            ).filter { it.isNotBlank() }.joinToString(", "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(Icons.Outlined.ChevronRight, null, Modifier.padding(start = 4.dp).size(20.dp), tint = scheme.onSurfaceVariant)
+                }
+            }
+            if (spots.size > 6) {
+                TextButton(onClick = { all = !all }, modifier = Modifier.padding(start = 8.dp)) {
+                    Text(if (all) stringResource(R.string.spots_show_less) else stringResource(R.string.spots_show_all, spots.size))
+                }
+            }
+        }
+    }
+}
+
+/** Poradie v rebríčku: prvé miesto výrazné, ďalšie jemnejšie, každé v inom tvare. */
+@Composable
+private fun RankBadge(rank: Int) {
+    val scheme = MaterialTheme.colorScheme
+    val (shape, bg, fg) = when (rank) {
+        1 -> Triple(ExpressiveShapes.Cookie12, scheme.primary, scheme.onPrimary)
+        2 -> Triple(ExpressiveShapes.Cookie, scheme.primaryContainer, scheme.onPrimaryContainer)
+        3 -> Triple(ExpressiveShapes.Clover, scheme.tertiaryContainer, scheme.onTertiaryContainer)
+        else -> Triple(ExpressiveShapes.Squircle, scheme.surfaceContainerHighest, scheme.onSurfaceVariant)
+    }
+    Box(
+        Modifier
+            .size(34.dp)
+            .background(bg, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(rank.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = fg)
+    }
+}
+
+/** Zaoblený pruh podielu (na dni a v rebríčku skladieb). */
+@Composable
+private fun ShareBar(fraction: Float, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0.03f, 1f))
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(50))
+                .background(color),
+        )
+    }
+}
+
+/** Prázdny denník: zložené výrazné tvary a krátke vysvetlenie (ako prázdna knižnica). */
+@Composable
+private fun PracticeEmpty() {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 36.dp, horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(156.dp), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(148.dp)
+                    .graphicsLayer { rotationZ = 14f }
+                    .background(scheme.tertiaryContainer, ExpressiveShapes.Clover),
+            )
+            Box(
+                Modifier
+                    .size(98.dp)
+                    .background(scheme.primary, ExpressiveShapes.Cookie12),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Timer, contentDescription = null, tint = scheme.onPrimary, modifier = Modifier.size(44.dp))
+            }
+        }
+        Spacer(Modifier.height(28.dp))
+        Text(stringResource(R.string.practice_empty_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(R.string.practice_empty_text),
+            style = MaterialTheme.typography.bodyLarge,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 480.dp),
+        )
+    }
+}
+
 /** Pripomienka cvičenia: zapnutie a čas (pýta si povolenie na notifikácie). */
 @Composable
-private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean, Int) -> Unit, onDismiss: () -> Unit) {
+private fun ReminderDialog(
+    enabled: Boolean,
+    minuteOfDay: Int,
+    weekly: Boolean,
+    onSave: (Boolean, Int, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     var on by remember { mutableStateOf(enabled) }
+    var weeklyOn by remember { mutableStateOf(weekly) }
     val time = rememberTimePickerState(
         initialHour = minuteOfDay / 60,
         initialMinute = minuteOfDay % 60,
@@ -963,12 +1254,12 @@ private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean,
     )
     var denied by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) onSave(true, time.hour * 60 + time.minute) else denied = true
+        if (granted) onSave(on, time.hour * 60 + time.minute, weeklyOn) else denied = true
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.NotificationsActive, null) },
+        icon = { DialogIcon(Icons.Outlined.NotificationsActive) },
         title = { Text(stringResource(R.string.reminder_title)) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -981,7 +1272,7 @@ private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(stringResource(R.string.reminder_switch), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Switch(checked = on, onCheckedChange = { on = it })
+                    ExpressiveSwitch(checked = on, onCheckedChange = { on = it })
                 }
                 Text(
                     stringResource(R.string.reminder_desc),
@@ -989,6 +1280,26 @@ private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (on) TimeInput(state = time)
+                // týždenný súhrn na začiatku týždňa
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { weeklyOn = !weeklyOn }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.weekly_notify_switch), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.weekly_notify_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    ExpressiveSwitch(checked = weeklyOn, onCheckedChange = { weeklyOn = it })
+                }
                 if (denied) {
                     Text(
                         stringResource(R.string.reminder_denied),
@@ -1001,10 +1312,10 @@ private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean,
         confirmButton = {
             TextButton(onClick = {
                 val minute = time.hour * 60 + time.minute
-                if (on && !PracticeReminder.canNotify(context) && android.os.Build.VERSION.SDK_INT >= 33) {
+                if ((on || weeklyOn) && !PracticeReminder.canNotify(context) && android.os.Build.VERSION.SDK_INT >= 33) {
                     permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    onSave(on, minute)
+                    onSave(on, minute, weeklyOn)
                 }
             }) { Text(stringResource(R.string.save)) }
         },
@@ -1012,6 +1323,7 @@ private fun ReminderDialog(enabled: Boolean, minuteOfDay: Int, onSave: (Boolean,
     )
 }
 
+/** Denný cieľ: posuvník 5 až 180 min a rýchle voľby. */
 @Composable
 private fun GoalDialog(current: Int, onSave: (Int) -> Unit, onDismiss: () -> Unit) {
     var value by remember { mutableFloatStateOf(current.toFloat()) }
@@ -1019,11 +1331,11 @@ private fun GoalDialog(current: Int, onSave: (Int) -> Unit, onDismiss: () -> Uni
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.Flag, null) },
+        icon = { DialogIcon(Icons.Outlined.Flag, ExpressiveShapes.Clover, Accent.Tertiary) },
         title = { Text(stringResource(R.string.practice_goal_title)) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.dur_min, minutes), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.dur_min, minutes), style = MaterialTheme.typography.displaySmall)
                 Text(
                     stringResource(R.string.practice_goal_desc),
                     style = MaterialTheme.typography.bodySmall,
@@ -1032,16 +1344,13 @@ private fun GoalDialog(current: Int, onSave: (Int) -> Unit, onDismiss: () -> Uni
                 )
                 Spacer(Modifier.height(12.dp))
                 Slider(value = value, onValueChange = { value = it }, valueRange = 5f..180f)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 45, 60).forEach { m ->
-                        FilterChip(
-                            selected = minutes == m,
-                            onClick = { value = m.toFloat() },
-                            label = { Text("$m") },
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                    }
-                }
+                Spacer(Modifier.height(4.dp))
+                ConnectedChoice(
+                    options = listOf(15, 30, 45, 60),
+                    selected = minutes,
+                    label = { it.toString() },
+                    onSelect = { value = it.toFloat() },
+                )
             }
         },
         confirmButton = { TextButton(onClick = { onSave(minutes) }) { Text(stringResource(R.string.save)) } },
@@ -1081,23 +1390,34 @@ private fun PieceSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Column {
-                Text(piece.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (piece.composer.isNotBlank()) {
-                    Text(piece.composer, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ShapeIcon(Icons.Outlined.MusicNote, ExpressiveShapes.Cookie12, scheme.primaryContainer, scheme.onPrimaryContainer, 56.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(piece.title, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (piece.composer.isNotBlank()) {
+                        Text(piece.composer, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard(Icons.Outlined.Schedule, stringResource(R.string.practice_total), formatDuration(total), Modifier.weight(1f))
-                StatCard(Icons.Outlined.CalendarMonth, stringResource(R.string.practice_sessions), sessions.size.toString(), Modifier.weight(1f))
+                StatCard(Icons.Outlined.Schedule, stringResource(R.string.practice_total), formatDuration(total), ExpressiveShapes.Squircle, Accent.Secondary, Modifier.weight(1f))
+                StatCard(Icons.Outlined.CalendarMonth, stringResource(R.string.practice_sessions), sessions.size.toString(), ExpressiveShapes.Cookie, Accent.Primary, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard(Icons.Outlined.Today, stringResource(R.string.practice_last), last?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(dateFormat) } ?: "-", Modifier.weight(1f))
-                StatCard(Icons.Outlined.Schedule, stringResource(R.string.practice_avg), formatDuration(avg), Modifier.weight(1f))
+                StatCard(
+                    Icons.Outlined.Today,
+                    stringResource(R.string.practice_last),
+                    last?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(dateFormat) } ?: "-",
+                    ExpressiveShapes.Clover,
+                    Accent.Tertiary,
+                    Modifier.weight(1f),
+                )
+                StatCard(Icons.Outlined.Timer, stringResource(R.string.practice_avg), formatDuration(avg), ExpressiveShapes.Cookie12, Accent.Primary, Modifier.weight(1f))
             }
-            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh)) {
+            Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerHigh)) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.practice_last8w), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.practice_last8w), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
                     val max = perWeek.maxOrNull()?.coerceAtLeast(60) ?: 60
                     val bar = scheme.primary
@@ -1111,9 +1431,9 @@ private fun PieceSheet(
                         val w = slot * 0.55f
                         perWeek.forEachIndexed { i, v ->
                             val x = i * slot + (slot - w) / 2
-                            drawRoundRect(track, Offset(x, 0f), Size(w, size.height), CornerRadius(w / 3))
+                            drawRoundRect(track, Offset(x, 0f), Size(w, size.height), CornerRadius(w / 2))
                             val h = size.height * v / max
-                            if (h > 0) drawRoundRect(bar, Offset(x, size.height - h), Size(w, h), CornerRadius(w / 3))
+                            if (h > 0) drawRoundRect(bar, Offset(x, size.height - h), Size(w, h), CornerRadius(w / 2))
                         }
                     }
                 }
@@ -1133,10 +1453,14 @@ private fun PieceSheet(
                     }
                 }
             }
-            FilledTonalButton(onClick = onOpen, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Outlined.MusicNote, null, Modifier.size(18.dp))
+            Button(
+                onClick = onOpen,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 14.dp),
+            ) {
+                Icon(Icons.Outlined.MusicNote, null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.practice_open_piece))
+                Text(stringResource(R.string.practice_open_piece), style = MaterialTheme.typography.titleSmall)
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.settings
 
+import com.daklok.crescendo.ui.common.ConnectedChoice
+import com.daklok.crescendo.ui.common.ExpressiveShapes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -41,9 +43,6 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -261,23 +260,24 @@ private fun ModeTile(
     )
     val checkScale by animateFloatAsState(if (selected) 1f else 0f, Motion.bouncy(), label = "check")
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         color = container,
         border = if (selected) BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.6f)) else null,
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interaction, 0.98f)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // vybraná predvoľba má ikonu vo vlnitom kruhu
             Box(
                 Modifier
-                    .size(36.dp)
-                    .background(iconBg, CircleShape),
+                    .size(38.dp)
+                    .background(iconBg, if (selected) ExpressiveShapes.Cookie else CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -316,7 +316,7 @@ private fun CustomMapping(
     onChange: (Map<GestureTrigger, PageAction>) -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f),
         modifier = Modifier
             .fillMaxWidth()
@@ -398,16 +398,14 @@ private fun TriggerRow(
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
-        SingleChoiceSegmentedButtonRow(Modifier.width(156.dp)) {
-            options.forEachIndexed { index, (a, icon, desc) ->
-                SegmentedButton(
-                    selected = action == a,
-                    onClick = { if (action != a) onAction(a) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                    icon = {},
-                    label = { Icon(icon, contentDescription = stringResource(desc), modifier = Modifier.size(18.dp)) },
-                )
-            }
+        ConnectedChoice(
+            options = options,
+            selected = options.first { it.first == action },
+            onSelect = { (a, _, _) -> if (action != a) onAction(a) },
+            modifier = Modifier.width(156.dp),
+            height = 36.dp,
+        ) { (_, icon, desc), _ ->
+            Icon(icon, contentDescription = stringResource(desc), modifier = Modifier.size(18.dp))
         }
     }
 }

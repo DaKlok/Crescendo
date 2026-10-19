@@ -39,7 +39,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,8 +54,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -67,6 +64,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.daklok.crescendo.R
 import com.daklok.crescendo.data.PracticeSessionEntity
+import com.daklok.crescendo.ui.common.WavyLinearProgress
+import com.daklok.crescendo.ui.common.WavyRing
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -169,7 +168,7 @@ object BadgeSeen {
 /** Sekcia odznakov v denníku: mriežka medailí; ťuk ukáže podrobnosti. Nový odznak sa oslávi. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BadgesSection(stats: BadgeStats, modifier: Modifier = Modifier) {
+fun BadgesSection(stats: BadgeStats, modifier: Modifier = Modifier, columns: Int = 0) {
     val context = LocalContext.current
     var detail by remember { mutableStateOf<BadgeDef?>(null) }
     val levels = BADGES.associate { it.id to it.level(stats) }
@@ -189,7 +188,7 @@ fun BadgesSection(stats: BadgeStats, modifier: Modifier = Modifier) {
     }
 
     Card(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -210,34 +209,48 @@ fun BadgesSection(stats: BadgeStats, modifier: Modifier = Modifier) {
                 )
             }
             Spacer(Modifier.height(14.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                BADGES.forEach { b ->
-                    val lvl = levels[b.id] ?: 0
-                    Column(
-                        Modifier
-                            .width(84.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { detail = b }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        BadgeMedal(b, lvl, progress(b, stats), size = 64.dp)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            stringResource(b.title),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (lvl > 0) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (lvl > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        LevelDots(lvl, b.tiers.size)
+            // jeden odznak s názvom a úrovňou
+            val badgeItem: @Composable (BadgeDef) -> Unit = { b ->
+                val lvl = levels[b.id] ?: 0
+                Column(
+                    Modifier
+                        .width(84.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { detail = b }
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    BadgeMedal(b, lvl, progress(b, stats), size = 64.dp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(b.title),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (lvl > 0) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (lvl > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    LevelDots(lvl, b.tiers.size)
+                }
+            }
+            if (columns > 0) {
+                // pevné riadky (vedľa grafu musí karta poznať svoju výšku, FlowRow ju odhadne zle)
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                    BADGES.chunked(columns).forEach { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            row.forEach { badgeItem(it) }
+                            repeat(columns - row.size) { Spacer(Modifier.width(84.dp)) }
+                        }
                     }
+                }
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    BADGES.forEach { badgeItem(it) }
                 }
             }
         }
@@ -291,24 +304,21 @@ fun BadgeMedal(b: BadgeDef, level: Int, progress: Float, size: Dp) {
     }
     val ring = scheme.primary
     val track = scheme.outlineVariant
+    val maxed = level >= b.tiers.size
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        // postup k ďalšej úrovni: vlnitý krúžok okolo (po najvyššej úrovni celý)
+        WavyRing(
+            progress = if (maxed) 1f else progress,
+            modifier = Modifier.fillMaxSize(),
+            color = ring,
+            trackColor = track,
+            stroke = size * 0.035f,
+            amplitude = size * 0.012f,
+            wavelength = size * 0.12f,
+        )
         Canvas(Modifier.fillMaxSize()) {
             val r = min(this.size.width, this.size.height) / 2f
             val c = Offset(this.size.width / 2f, this.size.height / 2f)
-            // postup k ďalšej úrovni – tenký krúžok okolo
-            val stroke = r * 0.07f
-            val ringR = r - stroke / 2f
-            drawCircle(track, ringR, c, style = Stroke(stroke))
-            if (progress > 0f && level < b.tiers.size) {
-                drawArc(
-                    ring, -90f, 360f * progress, false,
-                    topLeft = Offset(c.x - ringR, c.y - ringR),
-                    size = androidx.compose.ui.geometry.Size(ringR * 2, ringR * 2),
-                    style = Stroke(stroke, cap = StrokeCap.Round),
-                )
-            } else if (level >= b.tiers.size) {
-                drawCircle(ring, ringR, c, style = Stroke(stroke))
-            }
             // tvar medaily: kruh s 9 jemnými vlnami
             val base = r * 0.74f
             val amp = r * 0.06f
@@ -388,10 +398,9 @@ private fun BadgeDialog(b: BadgeDef, stats: BadgeStats, celebrate: Boolean = fal
                 }
                 if (next != null) {
                     Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { (value.toFloat() / next).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(8.dp),
-                        drawStopIndicator = {},
+                    WavyLinearProgress(
+                        progress = (value.toFloat() / next).coerceIn(0f, 1f),
+                        moving = false,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(

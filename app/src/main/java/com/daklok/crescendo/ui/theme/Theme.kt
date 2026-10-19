@@ -7,8 +7,14 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.daklok.crescendo.R
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -40,6 +46,7 @@ private val LightScheme = lightColorScheme(
     surfaceVariant = Color(0xFFE3E1EC),
     onSurfaceVariant = Color(0xFF46464F),
     surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceBright = Color(0xFFFEFBFF),
     surfaceContainerLow = Color(0xFFF7F2FA),
     surfaceContainer = Color(0xFFF1EDF6),
     surfaceContainerHigh = Color(0xFFEBE7F1),
@@ -69,6 +76,8 @@ private val DarkScheme = darkColorScheme(
     surfaceVariant = Color(0xFF2C2C2C),
     onSurfaceVariant = Color(0xFFC4C4C8),
     surfaceContainerLowest = Color(0xFF0B0B0B),
+    // svetlejšia plocha na tmavých kartách (tlačidlá ukážky a pridania v katalógu)
+    surfaceBright = Color(0xFF3F3F3F),
     surfaceContainerLow = Color(0xFF1C1C1C),
     surfaceContainer = Color(0xFF242424),
     surfaceContainerHigh = Color(0xFF2C2C2C),
@@ -101,6 +110,7 @@ private val PaperScheme = lightColorScheme(
     surfaceVariant = Color(0xFFE2DFD5),
     onSurfaceVariant = Color(0xFF3D3C37),
     surfaceContainerLowest = Color(0xFFFAF8F2),
+    surfaceBright = Color(0xFFFAF8F2),
     surfaceContainerLow = Color(0xFFEFECE3),
     surfaceContainer = Color(0xFFE9E6DC),
     surfaceContainerHigh = Color(0xFFE3E0D5),
@@ -111,11 +121,11 @@ private val PaperScheme = lightColorScheme(
 
 /** Veľké, výrazne zaoblené tvary – charakteristické pre Material 3 Expressive. */
 private val ExpressiveShapes = Shapes(
-    extraSmall = RoundedCornerShape(10.dp),
+    extraSmall = RoundedCornerShape(12.dp),
     small = RoundedCornerShape(16.dp),
     medium = RoundedCornerShape(24.dp),
     large = RoundedCornerShape(32.dp),
-    extraLarge = RoundedCornerShape(44.dp),
+    extraLarge = RoundedCornerShape(40.dp),
 )
 
 @Composable
@@ -157,16 +167,60 @@ fun isDarkFor(mode: ThemeMode): Boolean = when (mode) {
     else -> false
 }
 
-/** Výraznejšie nadpisy (tučné, tesnejšie), telo textu ostáva štandardné. */
+// ───────────────────────── Písmo ─────────────────────────
+
+/*
+ * Google Sans Flex (variabilné písmo, OFL) – rovnaké ako vo widgete. Jedno písmo, tri „hlasy“:
+ *  - Expressive: nadpisy – ťažké, zaoblené koncovky (os ROND), veľká optická veľkosť,
+ *  - Title: názvy kariet a riadkov – polotučné, mierne zaoblené,
+ *  - Text: telo a popisky – pokojné, bez zaoblenia, optická veľkosť pre malý text.
+ */
+@OptIn(ExperimentalTextApi::class)
+private fun gsf(weight: Int, round: Float, opsz: Float) = Font(
+    resId = R.font.google_sans_flex,
+    weight = FontWeight(weight),
+    variationSettings = FontVariation.Settings(
+        FontVariation.weight(weight),
+        FontVariation.Setting("ROND", round),
+        FontVariation.Setting("opsz", opsz),
+    ),
+)
+
+/** Písma Crescenda (aj na použitie mimo typografie, napr. veľké čísla). */
+object CrescendoFonts {
+    /** Nadpisy a veľké čísla – ťažké a zaoblené. */
+    val Expressive = FontFamily(gsf(600, 100f, 72f), gsf(700, 100f, 72f), gsf(800, 100f, 72f), gsf(900, 100f, 72f))
+
+    /** Názvy (karty, riadky, tlačidlá). */
+    val Title = FontFamily(gsf(500, 50f, 24f), gsf(600, 50f, 24f), gsf(700, 50f, 24f), gsf(800, 50f, 24f))
+
+    /** Bežný text. */
+    val Text = FontFamily(gsf(300, 0f, 16f), gsf(400, 0f, 16f), gsf(500, 0f, 16f), gsf(600, 20f, 16f), gsf(700, 20f, 16f), gsf(800, 20f, 16f))
+}
+
+/** Typografia Material 3 Expressive: výrazné, zaoblené nadpisy, pokojné telo textu. */
 private val CrescendoTypography = Typography().run {
+    fun TextStyle.ex(w: Int, track: Float) =
+        copy(fontFamily = CrescendoFonts.Expressive, fontWeight = FontWeight(w), letterSpacing = track.sp)
+    fun TextStyle.ti(w: Int, track: Float = 0f) =
+        copy(fontFamily = CrescendoFonts.Title, fontWeight = FontWeight(w), letterSpacing = track.sp)
+    fun TextStyle.tx(w: Int, track: Float) =
+        copy(fontFamily = CrescendoFonts.Text, fontWeight = FontWeight(w), letterSpacing = track.sp)
     copy(
-        displaySmall = displaySmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.25).sp),
-        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.Bold),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.Bold),
-        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        titleSmall = titleSmall.copy(fontWeight = FontWeight.SemiBold),
-        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        displayLarge = displayLarge.ex(800, -1.2f),
+        displayMedium = displayMedium.ex(800, -0.9f),
+        displaySmall = displaySmall.ex(800, -0.6f),
+        headlineLarge = headlineLarge.ex(800, -0.5f),
+        headlineMedium = headlineMedium.ex(800, -0.35f),
+        headlineSmall = headlineSmall.ex(700, -0.2f),
+        titleLarge = titleLarge.ti(700, -0.1f),
+        titleMedium = titleMedium.ti(600, 0f),
+        titleSmall = titleSmall.ti(600, 0f),
+        bodyLarge = bodyLarge.tx(400, 0.1f),
+        bodyMedium = bodyMedium.tx(400, 0.1f),
+        bodySmall = bodySmall.tx(400, 0.2f),
+        labelLarge = labelLarge.tx(600, 0.1f),
+        labelMedium = labelMedium.tx(600, 0.3f),
+        labelSmall = labelSmall.tx(600, 0.3f),
     )
 }

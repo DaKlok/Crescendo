@@ -18,7 +18,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -284,7 +283,7 @@ private fun LearnRow(
             Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
         if (onReset != null) TextButton(onClick = onReset) { Text(stringResource(R.string.calibration_reset)) }
-        FilledTonalButton(onClick = onLearn, shape = RoundedCornerShape(14.dp)) { Text(stringResource(R.string.pedal_learn)) }
+        FilledTonalButton(onClick = onLearn) { Text(stringResource(R.string.pedal_learn)) }
     }
 }
 
@@ -300,7 +299,7 @@ private fun KeyLearnDialog(title: String, onKey: (Int) -> Unit, onDismiss: () ->
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.SettingsRemote, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.SettingsRemote) },
         title = { Text(title) },
         text = {
             Box(
@@ -345,7 +344,7 @@ private fun MidiLearnDialog(midi: MidiPedals, title: String, onCc: (Int) -> Unit
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.Piano, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Piano, com.daklok.crescendo.ui.common.ExpressiveShapes.Squircle, com.daklok.crescendo.ui.common.Accent.Tertiary) },
         title = { Text(title) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -426,7 +425,7 @@ internal fun BleMidiScanDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.Bluetooth, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Bluetooth, com.daklok.crescendo.ui.common.ExpressiveShapes.Cookie12, com.daklok.crescendo.ui.common.Accent.Secondary) },
         title = { Text(stringResource(R.string.midi_bt_connect)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

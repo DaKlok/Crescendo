@@ -1,12 +1,27 @@
 package com.daklok.crescendo.ui.settings
 
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.SwipeVertical
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.style.TextOverflow
+import com.daklok.crescendo.ui.common.Accent
+import com.daklok.crescendo.ui.common.ConnectedChoice
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.ShapeIcon
+import com.daklok.crescendo.ui.common.TonalIconButton
+import com.daklok.crescendo.ui.common.colors
+import com.daklok.crescendo.ui.common.decoShape
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Crop
 import androidx.compose.material.icons.outlined.VerticalSplit
 import com.daklok.crescendo.ui.common.AUTHOR_AVATAR_URL
 import com.daklok.crescendo.ui.common.RemoteAvatar
-import com.daklok.crescendo.ui.common.IconBadge
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -26,15 +41,6 @@ import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.ui.common.OverlayKind
 import com.daklok.crescendo.ui.common.AppOverlay
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
-import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.outlined.CenterFocusStrong
-import androidx.compose.material.icons.outlined.SentimentSatisfied
-import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material.icons.outlined.Rotate90DegreesCw
-import androidx.compose.material.icons.outlined.Straighten
-import androidx.compose.material.icons.outlined.Gesture
 import com.daklok.crescendo.data.LanguageManager
 import com.daklok.crescendo.data.AppLanguage
 import androidx.compose.material.icons.outlined.Language
@@ -68,7 +74,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
 import com.daklok.crescendo.ui.common.pressScale
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -76,33 +81,23 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AutoStories
-import androidx.compose.material.icons.outlined.CameraFront
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Flip
-import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.ScreenRotation
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Vibration
-import androidx.compose.material.icons.outlined.ViewSidebar
+import androidx.compose.material.icons.automirrored.outlined.ViewSidebar
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -119,7 +114,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daklok.crescendo.data.AppSettings
-import com.daklok.crescendo.data.CameraChoice
 import com.daklok.crescendo.data.SettingsRepository
 import com.daklok.crescendo.data.ThemeMode
 import com.daklok.crescendo.data.ToolbarPosition
@@ -127,14 +121,12 @@ import com.daklok.crescendo.data.backup.BackupManager
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.FolderZip
 import com.daklok.crescendo.ui.common.AppMark
-import com.daklok.crescendo.ui.common.EnhancedSlider
 import com.daklok.crescendo.ui.common.Motion
 import com.daklok.crescendo.ui.common.SectionHeader
 import com.daklok.crescendo.ui.common.SettingSwitchRow
 import com.daklok.crescendo.ui.common.SettingsCard
 import com.daklok.crescendo.ui.common.rememberHaptic
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /** Nastavenia ako spodný panel (ako v Bible Lock Screen). */
 @Composable
@@ -169,11 +161,11 @@ fun SettingsSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = if (page == SettingsPage.HOME) 24.dp else 8.dp, end = 8.dp, bottom = 12.dp),
+                        .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    // nadpis: „Nastavenia“ alebo šípka späť + názov kategórie
+                    // nadpis: „Nastavenia“ alebo tlačidlo späť a názov kategórie
                     AnimatedContent(
                         targetState = page,
                         transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
@@ -182,25 +174,28 @@ fun SettingsSheet(
                     ) { p ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (p != SettingsPage.HOME) {
-                                IconButton(onClick = { page = SettingsPage.HOME }, modifier = Modifier.padding(end = 4.dp)) {
-                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
-                                }
+                                TonalIconButton(
+                                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                                    contentDescription = stringResource(R.string.back),
+                                    onClick = { page = SettingsPage.HOME },
+                                    modifier = Modifier.padding(end = 12.dp),
+                                )
+                            } else {
+                                Spacer(Modifier.width(8.dp))
                             }
                             Text(
                                 stringResource(p.titleRes),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.headlineSmall,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
-                    IconButton(onClick = close) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = stringResource(R.string.close),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    TonalIconButton(
+                        icon = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.close),
+                        onClick = close,
+                    )
                 }
             }
         },
@@ -257,6 +252,31 @@ fun SettingsSheet(
                                         }
                                     },
                                 )
+                                Divider()
+                                // prvý deň v týždni (denník cvičenia, týždenný súhrn)
+                                var weekStart by remember { mutableStateOf(com.daklok.crescendo.data.WeekStart.get(ctx)) }
+                                RowLabel(Icons.Outlined.CalendarMonth, stringResource(R.string.week_start))
+                                Segmented(
+                                    options = com.daklok.crescendo.data.WeekStartChoice.entries,
+                                    selected = weekStart,
+                                    label = { it.labelRes },
+                                    onSelect = { choice ->
+                                        weekStart = choice
+                                        com.daklok.crescendo.data.WeekStart.set(ctx, choice)
+                                    },
+                                )
+                                if (weekStart == com.daklok.crescendo.data.WeekStartChoice.AUTO) {
+                                    Text(
+                                        stringResource(
+                                            R.string.week_start_device,
+                                            com.daklok.crescendo.data.WeekStart.detect()
+                                                .getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(20.dp))
                             // ── Vzhľad ──
@@ -295,11 +315,27 @@ fun SettingsSheet(
                                     checked = settings.haptics,
                                     onChange = { v -> update { it.copy(haptics = v) } },
                                 )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.AutoAwesome,
+                                    title = stringResource(R.string.recognize_titles),
+                                    subtitle = stringResource(R.string.recognize_titles_desc),
+                                    checked = settings.recognizeTitles,
+                                    onChange = { v -> update { it.copy(recognizeTitles = v) } },
+                                )
                             }
                         }
                         SettingsPage.READER -> {
                             // ── Čítačka ──
                             SettingsCard {
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.SwipeVertical,
+                                    title = stringResource(R.string.continuous_scroll),
+                                    subtitle = stringResource(R.string.continuous_scroll_setting_desc),
+                                    checked = settings.continuousScroll,
+                                    onChange = { v -> update { it.copy(continuousScroll = v) } },
+                                )
+                                Divider()
                                 SettingSwitchRow(
                                     icon = Icons.Outlined.AutoStories,
                                     title = stringResource(R.string.two_pages),
@@ -355,6 +391,14 @@ fun SettingsSheet(
                                     checked = settings.keepScreenOn,
                                     onChange = { v -> update { it.copy(keepScreenOn = v) } },
                                 )
+                                Divider()
+                                SettingSwitchRow(
+                                    icon = Icons.Outlined.Flag,
+                                    title = stringResource(R.string.spots_show_on_page),
+                                    subtitle = stringResource(R.string.spots_show_on_page_desc),
+                                    checked = settings.showSpots,
+                                    onChange = { v -> update { it.copy(showSpots = v) } },
+                                )
                             }
                         }
                         SettingsPage.ANNOTATIONS -> {
@@ -368,7 +412,7 @@ fun SettingsSheet(
                                     onChange = { v -> update { it.copy(fingerDrawing = v) } },
                                 )
                                 Divider()
-                                RowLabel(Icons.Outlined.ViewSidebar, stringResource(R.string.toolbar_position_long))
+                                RowLabel(Icons.AutoMirrored.Outlined.ViewSidebar, stringResource(R.string.toolbar_position_long))
                                 Segmented(
                                     options = ToolbarPosition.entries,
                                     selected = settings.toolbarPosition,
@@ -413,17 +457,25 @@ fun SettingsSheet(
     }
 }
 
-/** Kategórie nastavení – hlavná stránka je krátky zoznam, detail sa otvorí ťuknutím. */
-internal enum class SettingsPage(@androidx.annotation.StringRes val titleRes: Int, val icon: ImageVector) {
-    HOME(R.string.settings, Icons.Outlined.Settings),
-    APPEARANCE(R.string.appearance_language, Icons.Outlined.Palette),
-    READER(R.string.reader, Icons.AutoMirrored.Outlined.MenuBook),
-    ANNOTATIONS(R.string.annotations, Icons.Outlined.Draw),
-    HEAD(R.string.head_tracking, Icons.Outlined.Face),
-    PEDALS(R.string.pedals, Icons.Outlined.Piano),
-    BACKUP(R.string.backup_title, Icons.Outlined.CloudUpload),
-    STORAGE(R.string.storage_title, Icons.Outlined.Storage),
-    ABOUT(R.string.about_support, Icons.Outlined.Info),
+/**
+ * Kategórie nastavení: hlavná stránka je krátky zoznam, detail sa otvorí ťuknutím.
+ * Každá kategória má vlastný výrazný tvar a farbu ikony.
+ */
+internal enum class SettingsPage(
+    @androidx.annotation.StringRes val titleRes: Int,
+    val icon: ImageVector,
+    val shape: Shape,
+    val accent: Accent,
+) {
+    HOME(R.string.settings, Icons.Outlined.Settings, ExpressiveShapes.Cookie, Accent.Primary),
+    APPEARANCE(R.string.appearance_language, Icons.Outlined.Palette, ExpressiveShapes.Cookie12, Accent.Primary),
+    READER(R.string.reader, Icons.AutoMirrored.Outlined.MenuBook, ExpressiveShapes.Squircle, Accent.Secondary),
+    ANNOTATIONS(R.string.annotations, Icons.Outlined.Draw, ExpressiveShapes.Clover, Accent.Tertiary),
+    HEAD(R.string.head_tracking, Icons.Outlined.Face, ExpressiveShapes.Cookie, Accent.Primary),
+    PEDALS(R.string.pedals, Icons.Outlined.Piano, ExpressiveShapes.Squircle, Accent.Tertiary),
+    BACKUP(R.string.backup_title, Icons.Outlined.CloudUpload, ExpressiveShapes.Cookie12, Accent.Secondary),
+    STORAGE(R.string.storage_title, Icons.Outlined.Storage, ExpressiveShapes.Clover, Accent.Primary),
+    ABOUT(R.string.about_support, Icons.Outlined.Info, ExpressiveShapes.Cookie, Accent.Tertiary),
 }
 
 /** Hlavná stránka: kategórie v troch kartách, pri každej krátky stav. */
@@ -502,67 +554,71 @@ private fun SettingsHome(settings: AppSettings, onOpen: (SettingsPage) -> Unit) 
     }
 }
 
-/** Karta Crescendo Pro hore v nastaveniach – výrazná pozvánka (zadarmo) alebo stav (Pro). */
+/** Karta Crescendo Pro hore v nastaveniach: výrazná pozvánka (zadarmo) alebo stav (Pro). */
 @Composable
 private fun ProCard() {
     val app = LocalContext.current.applicationContext as com.daklok.crescendo.CrescendoApp
     val isPro by app.pro.isPro.collectAsStateWithLifecycle()
-    val white = androidx.compose.ui.graphics.Color.White
+    val scheme = MaterialTheme.colorScheme
+    val white = Color.White
+    val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
+            .pressScale(interaction, 0.98f)
+            .clip(RoundedCornerShape(32.dp))
             .then(
-                if (isPro) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                if (isPro) Modifier.background(scheme.surfaceContainerHigh)
                 else Modifier.background(com.daklok.crescendo.ui.pro.proBrush()),
             )
-            .clickable { app.pro.showPaywall() }
-            .padding(18.dp),
+            // veľký vlnitý kruh v rohu (ozdoba)
+            .decoShape(
+                shape = ExpressiveShapes.Cookie12,
+                color = if (isPro) scheme.primary.copy(alpha = 0.07f) else white.copy(alpha = 0.10f),
+                diameter = 150.dp,
+                alignment = Alignment.CenterEnd,
+                offset = DpOffset(54.dp, 0.dp),
+                turn = { 12f },
+            )
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple()) { app.pro.showPaywall() },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(48.dp)
-                    .background(
-                        if (isPro) MaterialTheme.colorScheme.primaryContainer else white.copy(alpha = 0.22f),
-                        RoundedCornerShape(16.dp),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Star, null, Modifier.size(26.dp),
-                    tint = if (isPro) MaterialTheme.colorScheme.onPrimaryContainer else white,
-                )
-            }
-            androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            ShapeIcon(
+                icon = Icons.Filled.Star,
+                shape = ExpressiveShapes.Cookie12,
+                container = if (isPro) scheme.primaryContainer else white.copy(alpha = 0.22f),
+                content = if (isPro) scheme.onPrimaryContainer else white,
+                size = 52.dp,
+            )
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Crescendo Pro",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = if (isPro) MaterialTheme.colorScheme.onSurface else white,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = if (isPro) scheme.onSurface else white,
+                        maxLines = 1,
                     )
                     if (isPro) {
-                        androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(8.dp))
                         com.daklok.crescendo.ui.pro.ProBadge()
                     }
                 }
                 Text(
                     stringResource(if (isPro) R.string.pro_active else R.string.pro_settings_pitch),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isPro) MaterialTheme.colorScheme.onSurfaceVariant else white.copy(alpha = 0.9f),
+                    color = if (isPro) scheme.onSurfaceVariant else white.copy(alpha = 0.9f),
                 )
             }
             if (!isPro) {
-                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
                 androidx.compose.material3.Surface(shape = RoundedCornerShape(50), color = white) {
                     Text(
                         stringResource(R.string.pro_unlock),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        color = com.daklok.crescendo.ui.pro.proOnWhite(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                 }
             }
@@ -570,33 +626,43 @@ private fun ProCard() {
     }
 }
 
-/** Riadok kategórie: farebná ikona, názov, stav a šípka. */
+/** Riadok kategórie: ikona vo výraznom tvare (pri stlačení sa pootočí), názov, stav a šípka. */
 @Composable
 private fun CategoryRow(page: SettingsPage, summary: String, onOpen: (SettingsPage) -> Unit) {
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val turn by animateFloatAsState(if (pressed) 30f else 0f, Motion.bouncy(), label = "categoryTurn")
+    val c = page.accent.colors()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interaction, 0.98f)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple()) {
                 haptic(HapticFeedbackType.TextHandleMove)
                 onOpen(page)
             }
             .padding(vertical = 4.dp),
     ) {
-        IconBadge(page.icon, active = true, size = 40.dp)
+        ShapeIcon(
+            icon = page.icon,
+            shape = page.shape,
+            container = c.container,
+            content = c.onContainer,
+            size = 44.dp,
+            turn = turn,
+        )
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(stringResource(page.titleRes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(page.titleRes), style = MaterialTheme.typography.titleMedium)
             Text(
                 summary,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Icon(
@@ -607,6 +673,7 @@ private fun CategoryRow(page: SettingsPage, summary: String, onOpen: (SettingsPa
     }
 }
 
+/** Výber jednej možnosti ako spojená skupina tlačidiel (Material 3 Expressive). */
 @Composable
 internal fun <T> Segmented(
     options: List<T>,
@@ -614,21 +681,14 @@ internal fun <T> Segmented(
     label: (T) -> Int,
     onSelect: (T) -> Unit,
 ) {
-    val haptic = rememberHaptic()
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        options.forEachIndexed { index, option ->
-            SegmentedButton(
-                selected = option == selected,
-                onClick = {
-                    haptic(HapticFeedbackType.TextHandleMove)
-                    onSelect(option)
-                },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-            ) {
-                Text(stringResource(label(option)), maxLines = 1)
-            }
-        }
-    }
+    val labels = options.map { stringResource(label(it)) }
+    ConnectedChoice(
+        options = options,
+        selected = selected,
+        label = { labels[options.indexOf(it)] },
+        onSelect = onSelect,
+        height = 44.dp,
+    )
 }
 
 @Composable
@@ -663,9 +723,9 @@ private fun AboutCard() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            AppMark(48.dp)
+            AppMark(56.dp)
             Column {
-                Text("Crescendo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Crescendo", style = MaterialTheme.typography.headlineSmall)
                 Text(
                     stringResource(R.string.version_line, version),
                     style = MaterialTheme.typography.bodySmall,
@@ -743,11 +803,11 @@ private fun SupportCard() {
                 containerColor = Color(0xFFFF5E5B),
                 contentColor = Color.White,
             ),
-            shape = RoundedCornerShape(16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp),
         ) {
             Icon(Icons.Outlined.Favorite, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.donate), fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.donate), style = MaterialTheme.typography.titleSmall)
         }
     }
 }

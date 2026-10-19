@@ -14,6 +14,7 @@ playServicesAuth = "21.3.0"
 billing = "7.1.1"
 work = "2.10.1"
 docScanner = "16.0.0"
+textRecognition = "19.0.1"
 pdfbox = "2.0.27.0"
 
 [libraries]
@@ -43,6 +44,7 @@ androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "
 mlkit-face-detection = { module = "com.google.mlkit:face-detection", version.ref = "mlkitFace" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox" }
 mlkit-document-scanner = { module = "com.google.android.gms:play-services-mlkit-document-scanner", version.ref = "docScanner" }
+mlkit-text-recognition = { module = "com.google.android.gms:play-services-mlkit-text-recognition", version.ref = "textRecognition" }
 
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }

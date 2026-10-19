@@ -98,6 +98,28 @@ object MidiFile {
         return null
     }
 
+    /**
+     * Skutočné tempo skladby (štvrťové noty za minútu), ak ho MIDI naozaj obsahuje
+     * (nie chýbajúce tempo ani predvolené 4 = 60 z LilyPondu).
+     */
+    fun realTempoBpm(data: ByteArray): Int? {
+        val t = firstTempo(data) ?: return null
+        if (t == 1_000_000 || t <= 0) return null
+        return Math.round(60_000_000.0 / t).toInt().takeIf { it in 30..240 }
+    }
+
+    /** Počet dôb v takte z prvého označenia taktu (FF 58 04), alebo null. */
+    fun beatsPerBar(data: ByteArray): Int? {
+        var i = 0
+        while (i + 3 < data.size) {
+            if (data[i] == 0xFF.toByte() && data[i + 1] == 0x58.toByte() && data[i + 2] == 0x04.toByte()) {
+                return (data[i + 3].toInt() and 0xFF).takeIf { it in 1..12 }
+            }
+            i++
+        }
+        return null
+    }
+
     /** O koľko treba časy vynásobiť, aby skladba bez tempa hrala v [bpm] (štvrťové noty za minútu). */
     fun tempoFactor(data: ByteArray, bpm: Int): Double {
         val current = 60_000_000.0 / (firstTempo(data) ?: TEMPO_US)

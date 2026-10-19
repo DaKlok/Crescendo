@@ -47,7 +47,7 @@ fun AppendPagesDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.PostAdd, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.PostAdd, com.daklok.crescendo.ui.common.ExpressiveShapes.Squircle, com.daklok.crescendo.ui.common.Accent.Secondary) },
         title = { Text(stringResource(R.string.append_pages)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -69,7 +69,6 @@ fun AppendPagesDialog(
                 }
                 Button(
                     onClick = { onPickFile(atStart) },
-                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Outlined.FileOpen, null, Modifier.size(18.dp))
@@ -78,7 +77,6 @@ fun AppendPagesDialog(
                 }
                 FilledTonalButton(
                     onClick = { onScan(atStart) },
-                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Outlined.DocumentScanner, null, Modifier.size(18.dp))

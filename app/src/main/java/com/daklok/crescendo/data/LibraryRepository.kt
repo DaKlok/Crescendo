@@ -27,6 +27,7 @@ class LibraryRepository(
     private val folderDao: FolderDao,
     private val setlistDao: SetlistDao,
     private val practiceDao: PracticeDao,
+    private val spotDao: PracticeSpotDao,
 ) {
     private val pdfDir = File(context.filesDir, "pdfs").apply { mkdirs() }
     private val thumbDir = File(context.filesDir, "thumbs").apply { mkdirs() }
@@ -164,6 +165,8 @@ class LibraryRepository(
                 if (atStart) {
                     dao.shiftLastPage(piece.id, added)
                     annotations.shiftPages(piece.id, added)
+                    spotDao.shiftPages(piece.id, added)
+                    com.daklok.crescendo.data.follow.FollowStore(context).shiftPages(piece.id, added)
                 }
                 Result.success(added)
             } catch (e: Throwable) {
@@ -232,6 +235,9 @@ class LibraryRepository(
                 }
             }
             annotations.save(piece.id, PieceNotes(newPages, newStamps))
+            // cvičebné úseky idú so stranami; naučené otáčanie podľa zvuku už nesedí so stranami
+            spotDao.remapPages(piece.id, pages)
+            com.daklok.crescendo.data.follow.FollowStore(context).delete(piece.id)
             val newLast = pages.indexOfFirst { it.first == piece.lastPage }.coerceAtLeast(0)
             dao.saveProgress(piece.id, newLast, piece.lastOpenedAt)
             Result.success(Unit)
@@ -254,6 +260,7 @@ class LibraryRepository(
         try {
             PDFBoxResourceLoader.init(context.applicationContext)
             val notes = annotations.load(piece.id)
+            val spots = spotDao.forPiece(piece.id)
             var created = 0
             PDDocument.load(pdfFile(piece)).also { it.isAllSecurityToBeRemoved = true }.use { src ->
                 for ((name, from, to) in parts) {
@@ -293,6 +300,10 @@ class LibraryRepository(
                             stamps = notes.stamps.filterKeys { it in from..to }.mapKeys { it.key - from },
                         ),
                     )
+                    // cvičebné úseky z týchto strán
+                    spots.filter { it.page in from..to }.forEach { sp ->
+                        spotDao.insert(sp.copy(id = 0, pieceId = newId, page = sp.page - from))
+                    }
                     created++
                 }
             }
@@ -341,6 +352,56 @@ class LibraryRepository(
                 ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") }
                 ?.forEach { put("midi/" + it.name, it) }
             put("bookmarks.json", BookmarkStore(context).file(piece.id))
+            // cvičebné úseky (bez počítadiel, tie sú osobné)
+            val spots = spotDao.forPiece(piece.id)
+            if (spots.isNotEmpty()) {
+                zip.putNextEntry(java.util.zip.ZipEntry("spots.json"))
+                zip.write(spotsToJson(spots).toByteArray())
+                zip.closeEntry()
+            }
+        }
+    }
+
+    private fun spotsToJson(spots: List<PracticeSpotEntity>): String {
+        val arr = org.json.JSONArray()
+        spots.forEach { sp ->
+            arr.put(
+                org.json.JSONObject()
+                    .put("page", sp.page)
+                    .put("x1", sp.x1.toDouble())
+                    .put("y1", sp.y1.toDouble())
+                    .put("x2", sp.x2.toDouble())
+                    .put("y2", sp.y2.toDouble())
+                    .put("name", sp.name)
+                    .put("done", sp.done),
+            )
+        }
+        return arr.toString()
+    }
+
+    /** Úseky z balíka: pridajú sa tie, ktoré skladba ešte nemá (rovnaká strana a takmer rovnaké miesto). */
+    private suspend fun importSpots(pieceId: Long, file: File) {
+        if (!file.exists()) return
+        val arr = runCatching { org.json.JSONArray(file.readText()) }.getOrNull() ?: return
+        val existing = spotDao.forPiece(pieceId)
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val sp = PracticeSpotEntity(
+                pieceId = pieceId,
+                page = o.optInt("page"),
+                x1 = o.optDouble("x1").toFloat(),
+                y1 = o.optDouble("y1").toFloat(),
+                x2 = o.optDouble("x2").toFloat(),
+                y2 = o.optDouble("y2").toFloat(),
+                name = o.optString("name"),
+                done = o.optBoolean("done"),
+            )
+            if (sp.x1.isNaN() || sp.y1.isNaN() || sp.x2.isNaN() || sp.y2.isNaN()) continue
+            val dup = existing.any { e ->
+                e.page == sp.page && kotlin.math.abs(e.x1 - sp.x1) < 0.02f && kotlin.math.abs(e.y1 - sp.y1) < 0.02f &&
+                    kotlin.math.abs(e.x2 - sp.x2) < 0.02f && kotlin.math.abs(e.y2 - sp.y2) < 0.02f
+            }
+            if (!dup) spotDao.insert(sp)
         }
     }
 
@@ -421,6 +482,7 @@ class LibraryRepository(
             File(root, "bookmarks.json").takeIf { it.exists() }?.let { f ->
                 runCatching { BookmarkStore(context).save(id, BookmarkStore.fromJson(f.readText())) }
             }
+            runCatching { importSpots(id, File(root, "spots.json")) }
             // referenčné nahrávky – pod pôvodným názvom (pri ďalšej aktualizácii sa nezdvoja)
             val audio = PieceAudio(context)
             val refDir = File(File(context.filesDir, "audio"), id.toString()).apply { mkdirs() }
@@ -512,6 +574,7 @@ class LibraryRepository(
             File(root, "bookmarks.json").takeIf { it.exists() }?.let { f ->
                 runCatching { BookmarkStore(context).save(id, BookmarkStore.fromJson(f.readText())) }
             }
+            runCatching { importSpots(id, File(root, "spots.json")) }
             Result.success(id)
         } catch (e: Throwable) {
             Result.failure(e)
@@ -524,6 +587,8 @@ class LibraryRepository(
         dao.delete(piece)
         setlistDao.deleteItemsForPiece(piece.id)
         practiceDao.deleteForPiece(piece.id)
+        spotDao.deleteForPiece(piece.id)
+        com.daklok.crescendo.data.follow.FollowStore(context).delete(piece.id)
         pdfFile(piece).delete()
         thumbFile(piece)?.delete()
         File(context.filesDir, "annotations/${piece.id}.json").delete()

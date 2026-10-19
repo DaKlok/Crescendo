@@ -1,5 +1,8 @@
 package com.daklok.crescendo.ui.reader
 
+import androidx.compose.foundation.layout.PaddingValues
+import com.daklok.crescendo.ui.common.PlayCookie
+import com.daklok.crescendo.ui.common.ExpressiveShapes
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Forward10
@@ -30,24 +31,14 @@ import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileOpen
-import androidx.compose.material.icons.outlined.HourglassTop
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Piano
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -321,192 +312,183 @@ fun VisualizerPanel(
     val latestRecording = sources.firstOrNull { it.kind == com.daklok.crescendo.data.MidiSourceKind.RECORDING }
     val useRecording: (() -> Unit)? = latestRecording?.let { rec -> { chooseSource(rec.key) } }
 
-    Surface(
+    ToolPanel(
+        title = stringResource(R.string.visualizer),
+        icon = Icons.Outlined.Piano,
+        shape = ExpressiveShapes.Cookie12,
+        container = MaterialTheme.colorScheme.primary,
+        content = MaterialTheme.colorScheme.onPrimary,
+        onClose = onClose,
         modifier = modifier,
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Column(Modifier.padding(vertical = 10.dp)) {
-            // hlavička
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp)) {
-                Icon(Icons.Outlined.Piano, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
+        bodyPadding = PaddingValues(bottom = 10.dp),
+        spacing = 0.dp,
+        actions = {
+            refJobs[pieceId]?.let { p ->
+                // vyrába sa zvuk / referenčná nahrávka
                 Text(
-                    stringResource(R.string.visualizer),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
+                    if (p < 0) stringResource(R.string.ref_job_downloading) else stringResource(R.string.vis_preparing, (p * 100).toInt()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.padding(end = 4.dp),
                 )
-                refJobs[pieceId]?.let { p ->
-                    // vyrába sa zvuk / referenčná nahrávka
-                    Text(
-                        if (p < 0) stringResource(R.string.ref_job_downloading) else stringResource(R.string.vis_preparing, (p * 100).toInt()),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        modifier = Modifier.padding(end = 4.dp),
+            }
+            if (hasMidi && song != null) {
+                ToolButton(
+                    icon = if (collapsed) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    description = stringResource(if (collapsed) R.string.vis_show_falling else R.string.vis_hide_falling),
+                    onClick = { collapsed = !collapsed },
+                )
+            }
+        },
+    ) {
+
+        // odkiaľ sú noty – rýchle prepínanie medzi katalógom, importovanými súbormi a nahrávkami z klavíra
+        if (hasMidi) {
+            SourcePicker(
+                sources = sources,
+                selectedKey = selectedKey,
+                onSelect = { chooseSource(it) },
+                onRemove = { confirmRemove = it },
+                onImport = importMidi,
+                // MIDI z katalógu bolo odstránené – dá sa stiahnuť znova
+                onFromCatalog = if (refJobs[pieceId] == null && sources.none { it.kind == com.daklok.crescendo.data.MidiSourceKind.CATALOG }) fromCatalog else null,
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
+            )
+        }
+
+        val s = song
+        if (songLoading) {
+            // MIDI sa ešte číta – len krátke načítavanie v paneli
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(if (compact) 200.dp else 280.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp)
+            }
+            return@ToolPanel
+        }
+        if (!hasMidi || s == null) {
+            EmptyVisualizer(
+                error = importError,
+                onFromCatalog = if (refJobs[pieceId] == null) fromCatalog else null,
+                onImport = importMidi,
+                onUseRecording = useRecording,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            return@ToolPanel
+        }
+
+        // padajúce noty (dajú sa skryť šípkou v hlavičke) + klaviatúra
+        val rollHeight by androidx.compose.animation.core.animateDpAsState(
+            targetValue = when {
+                collapsed -> if (compact) 64.dp else 84.dp
+                compact -> 240.dp
+                else -> 340.dp
+            },
+            animationSpec = com.daklok.crescendo.ui.common.Motion.snappy(),
+            label = "rollHeight",
+        )
+        PianoRoll(
+            song = s,
+            clock = { clock },
+            held = held,
+            waitingFor = waitingFor,
+            showFalling = !collapsed,
+            keyboardHeight = if (compact) 56.dp else 76.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(rollHeight)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+
+        // ovládanie
+        run {
+            Column(Modifier.padding(horizontal = 12.dp)) {
+                // čas a posuvník priamo pod klavírom
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TimeAndSeek(
+                        clock = { clock },
+                        duration = s.duration,
+                        onSeek = { t -> seekTo(t) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                if (hasMidi && song != null) {
-                    IconButton(onClick = { collapsed = !collapsed }) {
-                        Icon(
-                            if (collapsed) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                            stringResource(if (collapsed) R.string.vis_show_falling else R.string.vis_hide_falling),
+                val transport: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        androidx.compose.material3.FilledTonalIconButton(
+                            onClick = {
+                                stopPlayback()
+                                seekTo(0.0)
+                            },
+                            modifier = Modifier.size(44.dp),
+                        ) { Icon(Icons.Outlined.Stop, stringResource(R.string.vis_stop)) }
+                        androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock - 10) }, modifier = Modifier.size(52.dp)) {
+                            Icon(Icons.Outlined.Replay10, stringResource(R.string.vis_back10), Modifier.size(26.dp))
+                        }
+                        PlayButton(
+                            progress = soundProgress,
+                            running = running,
+                            onClick = { if (running) stopPlayback() else startPlayback() },
                         )
+                        androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock + 10) }, modifier = Modifier.size(52.dp)) {
+                            Icon(Icons.Outlined.Forward10, stringResource(R.string.vis_fwd10), Modifier.size(26.dp))
+                        }
                     }
                 }
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
-            }
-
-            // odkiaľ sú noty – rýchle prepínanie medzi katalógom, importovanými súbormi a nahrávkami z klavíra
-            if (hasMidi) {
-                SourcePicker(
-                    sources = sources,
-                    selectedKey = selectedKey,
-                    onSelect = { chooseSource(it) },
-                    onRemove = { confirmRemove = it },
-                    onImport = importMidi,
-                    // MIDI z katalógu bolo odstránené – dá sa stiahnuť znova
-                    onFromCatalog = if (refJobs[pieceId] == null && sources.none { it.kind == com.daklok.crescendo.data.MidiSourceKind.CATALOG }) fromCatalog else null,
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
-                )
-            }
-
-            val s = song
-            if (songLoading) {
-                // MIDI sa ešte číta – len krátke načítavanie v paneli
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(if (compact) 200.dp else 280.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp)
+                // rýchlosť – jeden posuvník (40–200 %), ťuk na percentá = späť na 100 %
+                val speedRow: @Composable (Modifier) -> Unit = { m ->
+                    Row(m, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Speed, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Slider(
+                            value = speed,
+                            onValueChange = { v ->
+                                val sp = (v * 20).roundToInt() / 20f
+                                if (sp != speed) {
+                                    speed = sp
+                                    player.setPlaybackSpeed(sp)
+                                }
+                            },
+                            valueRange = 0.4f..2f,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp),
+                        )
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                speed = 1f
+                                player.setPlaybackSpeed(1f)
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                        ) { Text("${(speed * 100).roundToInt()} %", fontWeight = FontWeight.Bold) }
+                    }
                 }
-                return@Column
-            }
-            if (!hasMidi || s == null) {
-                EmptyVisualizer(
-                    error = importError,
-                    onFromCatalog = if (refJobs[pieceId] == null) fromCatalog else null,
-                    onImport = importMidi,
-                    onUseRecording = useRecording,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                return@Column
-            }
-
-            // padajúce noty (dajú sa skryť šípkou v hlavičke) + klaviatúra
-            val rollHeight by androidx.compose.animation.core.animateDpAsState(
-                targetValue = when {
-                    collapsed -> if (compact) 64.dp else 84.dp
-                    compact -> 240.dp
-                    else -> 340.dp
-                },
-                animationSpec = com.daklok.crescendo.ui.common.Motion.snappy(),
-                label = "rollHeight",
-            )
-            PianoRoll(
-                song = s,
-                clock = { clock },
-                held = held,
-                waitingFor = waitingFor,
-                showFalling = !collapsed,
-                keyboardHeight = if (compact) 56.dp else 76.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(rollHeight)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-
-            // ovládanie
-            run {
-                Column(Modifier.padding(horizontal = 12.dp)) {
-                    // čas a posuvník priamo pod klavírom
+                if (compact) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                    speedRow(Modifier.fillMaxWidth())
+                } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TimeAndSeek(
-                            clock = { clock },
-                            duration = s.duration,
-                            onSeek = { t -> seekTo(t) },
-                            modifier = Modifier.weight(1f),
-                        )
+                        transport()
+                        Spacer(Modifier.width(20.dp))
+                        speedRow(Modifier.weight(1f))
                     }
-                    val transport: @Composable () -> Unit = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            androidx.compose.material3.FilledTonalIconButton(
-                                onClick = {
-                                    stopPlayback()
-                                    seekTo(0.0)
-                                },
-                                modifier = Modifier.size(44.dp),
-                            ) { Icon(Icons.Outlined.Stop, stringResource(R.string.vis_stop)) }
-                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock - 10) }, modifier = Modifier.size(52.dp)) {
-                                Icon(Icons.Outlined.Replay10, stringResource(R.string.vis_back10), Modifier.size(26.dp))
-                            }
-                            PlayButton(
-                                progress = soundProgress,
-                                running = running,
-                                onClick = { if (running) stopPlayback() else startPlayback() },
-                            )
-                            androidx.compose.material3.FilledTonalIconButton(onClick = { seekTo(clock + 10) }, modifier = Modifier.size(52.dp)) {
-                                Icon(Icons.Outlined.Forward10, stringResource(R.string.vis_fwd10), Modifier.size(26.dp))
-                            }
-                        }
-                    }
-                    // rýchlosť – jeden posuvník (40–200 %), ťuk na percentá = späť na 100 %
-                    val speedRow: @Composable (Modifier) -> Unit = { m ->
-                        Row(m, verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Speed, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Slider(
-                                value = speed,
-                                onValueChange = { v ->
-                                    val sp = (v * 20).roundToInt() / 20f
-                                    if (sp != speed) {
-                                        speed = sp
-                                        player.setPlaybackSpeed(sp)
-                                    }
-                                },
-                                valueRange = 0.4f..2f,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp),
-                            )
-                            androidx.compose.material3.TextButton(
-                                onClick = {
-                                    speed = 1f
-                                    player.setPlaybackSpeed(1f)
-                                },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                            ) { Text("${(speed * 100).roundToInt()} %", fontWeight = FontWeight.Bold) }
-                        }
-                    }
-                    if (compact) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
-                        speedRow(Modifier.fillMaxWidth())
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            transport()
-                            Spacer(Modifier.width(20.dp))
-                            speedRow(Modifier.weight(1f))
-                        }
-                    }
-                    val hint = when {
-                        !pianoConnected -> stringResource(R.string.vis_connect_hint)
-                        else -> null
-                    }
-                    if (hint != null) {
-                        Text(
-                            hint,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (waitingFor.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = if (waitingFor.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 4.dp, top = 2.dp),
-                        )
-                    }
+                }
+                val hint = when {
+                    !pianoConnected -> stringResource(R.string.vis_connect_hint)
+                    else -> null
+                }
+                if (hint != null) {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (waitingFor.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (waitingFor.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                    )
                 }
             }
         }
@@ -516,7 +498,7 @@ fun VisualizerPanel(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmRemove = null },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Delete, null) },
+            icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Delete, destructive = true) },
             title = { Text(stringResource(R.string.vis_source_remove_title)) },
             text = { Text(stringResource(R.string.vis_source_remove_text)) },
             confirmButton = {
@@ -546,13 +528,12 @@ private fun PlayButton(progress: Float, running: Boolean, onClick: () -> Unit) {
                 modifier = Modifier.size(40.dp),
                 strokeWidth = 3.5.dp,
             )
-            else -> FilledIconButton(
+            else -> PlayCookie(
+                size = 68.dp,
+                playing = running,
+                contentDescription = stringResource(if (running) R.string.pause else R.string.play),
                 onClick = onClick,
-                modifier = Modifier.size(68.dp),
-                shape = RoundedCornerShape(if (running) 20.dp else 34.dp),
-            ) {
-                Icon(if (running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null, Modifier.size(34.dp))
-            }
+            )
         }
     }
 }
@@ -614,13 +595,13 @@ private fun EmptyVisualizer(
             )
         }
         if (onFromCatalog != null) {
-            androidx.compose.material3.Button(onClick = onFromCatalog, shape = RoundedCornerShape(18.dp)) {
+            androidx.compose.material3.Button(onClick = onFromCatalog) {
                 Icon(Icons.Outlined.Piano, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.vis_from_catalog))
             }
         }
-        FilledTonalButton(onClick = onImport, shape = RoundedCornerShape(18.dp)) {
+        FilledTonalButton(onClick = onImport) {
             Icon(Icons.Outlined.FileOpen, null, Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.vis_import))

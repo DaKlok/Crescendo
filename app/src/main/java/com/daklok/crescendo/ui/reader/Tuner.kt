@@ -1,5 +1,13 @@
 package com.daklok.crescendo.ui.reader
 
+import kotlin.math.sin
+import kotlin.math.cos
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.ConnectedChoice
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.layout.Box
 import android.Manifest
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -21,8 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,18 +48,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.daklok.crescendo.R
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daklok.crescendo.CrescendoApp
 import com.daklok.crescendo.data.music.Chord
@@ -226,50 +225,82 @@ fun TunerContent(modifier: Modifier = Modifier) {
             }
             return@Column
         }
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                if (midi.isNaN()) "-" else NOTE_NAMES[((nearest % 12) + 12) % 12],
-                style = MaterialTheme.typography.displayLarge,
-                fontWeight = FontWeight.Bold,
-                color = color,
-            )
-            if (!midi.isNaN()) {
+        // oblúková stupnica −50…+50 centov: zelená zóna uprostred, guľka ukazuje odchýlku, tón v strede oblúka
+        val track = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        val zone = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+        val tick = MaterialTheme.colorScheme.outlineVariant
+        val center = MaterialTheme.colorScheme.primary
+        val onDot = MaterialTheme.colorScheme.surface
+        val hasPitch = !midi.isNaN()
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(156.dp),
+        ) {
+            Canvas(Modifier.matchParentSize()) {
+                val sw = 12.dp.toPx()
+                val cx = size.width / 2f
+                val r = minOf(size.width / 2f - sw * 2f, (size.height - sw * 2f) / 0.83f)
+                val cy = sw * 1.5f + r
+                val tl = Offset(cx - r, cy - r)
+                val sz = Size(2f * r, 2f * r)
+                drawArc(track, 190f, 160f, false, tl, sz, style = Stroke(sw, cap = StrokeCap.Round))
+                // ±5 centov = naladené
+                drawArc(zone, 262f, 16f, false, tl, sz, style = Stroke(sw, cap = StrokeCap.Round))
+                for (c in -50..50 step 10) {
+                    val a = Math.toRadians((270f + c / 50f * 80f).toDouble())
+                    val r1 = r + sw
+                    val r2 = r1 + if (c == 0) 10.dp.toPx() else 5.dp.toPx()
+                    drawLine(
+                        if (c == 0) center else tick,
+                        Offset(cx + r1 * cos(a).toFloat(), cy + r1 * sin(a).toFloat()),
+                        Offset(cx + r2 * cos(a).toFloat(), cy + r2 * sin(a).toFloat()),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                }
+                if (hasPitch) {
+                    val a = Math.toRadians((270f + needle / 50f * 80f).toDouble())
+                    val p = Offset(cx + r * cos(a).toFloat(), cy + r * sin(a).toFloat())
+                    drawCircle(color, radius = sw * 1.05f, center = p)
+                    drawCircle(onDot, radius = sw * 0.38f, center = p)
+                }
+            }
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 2.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
                 Text(
-                    "${nearest / 12 - 1}",
-                    style = MaterialTheme.typography.titleLarge,
+                    if (!hasPitch) "-" else NOTE_NAMES[((nearest % 12) + 12) % 12],
+                    style = MaterialTheme.typography.displayLarge,
                     color = color,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
                 )
+                if (hasPitch) {
+                    Text(
+                        "${nearest / 12 - 1}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = color,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+                    )
+                }
             }
         }
         Text(
-            if (midi.isNaN()) stringResource(R.string.tuner_play_note)
+            if (!hasPitch) stringResource(R.string.tuner_play_note)
             else String.format(java.util.Locale.US, "%.1f Hz · %+d ct", freq, cents.roundToInt()),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // stupnica −50…+50 centov s ručičkou
-        val track = MaterialTheme.colorScheme.outlineVariant
-        val center = MaterialTheme.colorScheme.primary
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .height(36.dp),
-        ) {
-            val w = size.width
-            val mid = w / 2f
-            for (c in -50..50 step 10) {
-                val x = mid + c / 50f * (w / 2f - 8f)
-                val h = if (c == 0) size.height else size.height * 0.45f
-                drawLine(if (c == 0) center else track, Offset(x, size.height - h), Offset(x, size.height), strokeWidth = if (c == 0) 4f else 2f)
-            }
-            val nx = mid + needle / 50f * (w / 2f - 8f)
-            drawLine(color, Offset(nx, 0f), Offset(nx, size.height), strokeWidth = 8f, cap = StrokeCap.Round)
-        }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { a4 = (a4 - 1).coerceAtLeast(415) }) { Icon(Icons.Outlined.Remove, null) }
-            Text("A4 = $a4 Hz", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = { a4 = (a4 + 1).coerceAtMost(466) }) { Icon(Icons.Outlined.Add, null) }
+            ToolButton(Icons.Outlined.Remove, stringResource(R.string.tuner_a4_down), onClick = { a4 = (a4 - 1).coerceAtLeast(415) })
+            Text(
+                "A4 = $a4 Hz",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 10.dp),
+            )
+            ToolButton(Icons.Outlined.Add, stringResource(R.string.tuner_a4_up), onClick = { a4 = (a4 + 1).coerceAtMost(466) })
         }
     }
 }
@@ -281,48 +312,32 @@ fun TunerContent(modifier: Modifier = Modifier) {
 @Composable
 fun TunerPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
     var mode by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(1) }
-    androidx.compose.material3.Surface(
+    val scheme = MaterialTheme.colorScheme
+    val noteLabel = stringResource(R.string.tuner_mode_note)
+    val chordLabel = stringResource(R.string.tuner_mode_chord)
+    ToolPanel(
+        title = stringResource(R.string.tuner),
+        icon = Icons.Outlined.GraphicEq,
+        shape = ExpressiveShapes.Clover,
+        container = scheme.tertiaryContainer,
+        content = scheme.onTertiaryContainer,
+        onClose = onClose,
         modifier = modifier.widthIn(max = 360.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(R.string.tuner),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 4.dp),
-                )
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
-            }
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = mode == 0,
-                    onClick = { mode = 0 },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    icon = {},
-                ) { Text(stringResource(R.string.tuner_mode_note), maxLines = 1) }
-                SegmentedButton(
-                    selected = mode == 1,
-                    onClick = { mode = 1 },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    icon = {},
-                ) { Text(stringResource(R.string.tuner_mode_chord), maxLines = 1) }
-            }
-            if (mode == 0) {
-                TunerContent(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                )
-            } else {
-                ChordContent(Modifier.fillMaxWidth())
-            }
+        ConnectedChoice(
+            options = listOf(0, 1),
+            selected = mode,
+            label = { if (it == 0) noteLabel else chordLabel },
+            onSelect = { mode = it },
+        )
+        if (mode == 0) {
+            TunerContent(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            )
+        } else {
+            ChordContent(Modifier.fillMaxWidth())
         }
     }
 }

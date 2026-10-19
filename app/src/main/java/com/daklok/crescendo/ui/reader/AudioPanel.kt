@@ -1,5 +1,7 @@
 package com.daklok.crescendo.ui.reader
 
+import com.daklok.crescendo.ui.common.PlayCookie
+import com.daklok.crescendo.ui.common.ExpressiveShapes
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -13,17 +15,12 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,44 +34,33 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bluetooth
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Headphones
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Piano
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.LibraryMusic
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Stop
-import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,7 +82,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +103,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.outlined.CompareArrows
 import androidx.compose.material3.HorizontalDivider
 import java.io.File
 import kotlin.math.roundToInt
@@ -363,6 +349,7 @@ fun AudioPanel(
     // potvrdenie pred zmazaním / nahradením – nahrávky sa nedajú zmazať omylom
     var confirmDeleteRecording by remember { mutableStateOf<File?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) } // 0 = Nahrávky, 1 = Moje nahrávky
+    var compareOpen by remember { mutableStateOf(false) }
     var confirmDeleteReference by remember { mutableStateOf<com.daklok.crescendo.data.ReferenceAudio?>(null) }
     var renameReference by remember { mutableStateOf<com.daklok.crescendo.data.ReferenceAudio?>(null) }
 
@@ -477,30 +464,21 @@ fun AudioPanel(
     val screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
     val maxHeight = (screenH * (if (nowTitle != null) 0.52f else 0.78f)).dp
     Column(modifier.widthIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    // prehrávač – samostatná „pilulka“ nad panelom, hrá čokoľvek si vyberieš (z oboch záložiek)
-    androidx.compose.animation.AnimatedVisibility(visible = nowTitle != null) {
-        if (nowTitle != null) PlayerPill(player, nowTitle, nowSource)
-    }
-    Surface(
-        modifier = Modifier.heightIn(max = maxHeight),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Column(Modifier.padding(vertical = 12.dp)) {
-            // hlavička
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 18.dp, end = 4.dp)) {
-                Icon(Icons.Outlined.Headphones, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(R.string.audio_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, stringResource(R.string.close)) }
-            }
+        // prehrávač – samostatná „pilulka“ nad panelom, hrá čokoľvek si vyberieš (z oboch záložiek)
+        androidx.compose.animation.AnimatedVisibility(visible = nowTitle != null) {
+            if (nowTitle != null) PlayerPill(player, nowTitle, nowSource)
+        }
+        ToolPanel(
+            title = stringResource(R.string.audio_title),
+            icon = Icons.Outlined.Headphones,
+            shape = ExpressiveShapes.Squircle,
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClose = onClose,
+            modifier = Modifier.heightIn(max = maxHeight),
+            bodyPadding = PaddingValues(bottom = 12.dp),
+            spacing = 0.dp,
+        ) {
             Column(
                 Modifier
                     .verticalScroll(androidx.compose.foundation.rememberScrollState())
@@ -663,6 +641,21 @@ fun AudioPanel(
                         }
                     }
                 }
+                // porovnanie dvoch nahrávok (napr. dnes a pred mesiacom)
+                if (recordings.count { playables[it] != null } >= 2 && !recording) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = {
+                            player.pause()
+                            compareOpen = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.CompareArrows, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.compare_button))
+                    }
+                }
                 recordings.forEach { f ->
                     val isMidi = MidiRenderer.isMidi(f)
                     val play = playables[f]
@@ -702,6 +695,13 @@ fun AudioPanel(
             }
         }
     }
+
+    if (compareOpen) {
+        val tracks = recordings.mapNotNull { f ->
+            val play = playables[f] ?: return@mapNotNull null
+            CompareTrack(play, recordingTitle(f), f.nameWithoutExtension.toLongOrNull() ?: f.lastModified())
+        }
+        if (tracks.size >= 2) CompareRecordingsSheet(tracks = tracks, onDismiss = { compareOpen = false }) else compareOpen = false
     }
 
     confirmDeleteRecording?.let { f ->
@@ -742,7 +742,7 @@ fun AudioPanel(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { renameReference = null },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.Edit, null) },
+            icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Edit) },
             title = { Text(stringResource(R.string.reference_rename)) },
             text = {
                 androidx.compose.material3.OutlinedTextField(
@@ -808,7 +808,10 @@ private fun TrackRow(
             Box(
                 Modifier
                     .size(40.dp)
-                    .background(if (active) scheme.primary else scheme.surfaceContainerLow, CircleShape),
+                    .background(
+                        if (active) scheme.primary else scheme.surfaceContainerLow,
+                        if (active) ExpressiveShapes.Cookie else CircleShape,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (progress != null) {
@@ -846,7 +849,7 @@ private fun TrackRow(
             Box {
                 var open by remember { mutableStateOf(false) }
                 IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.more)) }
-                androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp)) {
+                androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(20.dp)) {
                     menu.forEach { action ->
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(stringResource(action.label)) },
@@ -919,9 +922,12 @@ private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FilledIconButton(onClick = { player.toggle() }, modifier = Modifier.size(52.dp)) {
-                Icon(if (player.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, null, Modifier.size(28.dp))
-            }
+            PlayCookie(
+                size = 56.dp,
+                playing = player.playing,
+                contentDescription = stringResource(if (player.playing) R.string.pause else R.string.play),
+                onClick = { player.toggle() },
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -965,12 +971,12 @@ private fun PlayerPill(player: AudioPlayer, title: String, source: String) {
                 Text(stringResource(R.string.audio_loop_section), style = MaterialTheme.typography.labelLarge)
                 if (looping) {
                     Text(
-                        formatClock(player.loopA ?: 0) + " - " + formatClock(player.loopB ?: 0),
+                        stringResource(R.string.time_range, formatClock(player.loopA ?: 0), formatClock(player.loopB ?: 0)),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }
-            androidx.compose.material3.Switch(
+            com.daklok.crescendo.ui.common.ExpressiveSwitch(
                 checked = looping,
                 onCheckedChange = { on ->
                     if (on && player.duration > 0) {
@@ -1054,7 +1060,7 @@ private fun ConfirmDialog(
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
-        icon = { Icon(Icons.Outlined.Delete, null) },
+        icon = { com.daklok.crescendo.ui.common.DialogIcon(Icons.Outlined.Delete, destructive = true) },
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text(confirm) } },

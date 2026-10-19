@@ -55,6 +55,10 @@ fun PageView(
     cropMargins: Boolean = false,
     /** Nočný režim – invertované farby nôt. */
     night: Boolean = false,
+    /** Ďalšia vrstva presne nad stranou (napr. cvičebné úseky); dostane číslo strany. */
+    overlay: @Composable (page: Int) -> Unit = {},
+    /** Rozlíšenie vykreslenia oproti ploche (×1,5 pre ostrosť; pri posúvaní stačí ×1, strany sú veľké). */
+    renderScale: Float = 1.5f,
 ) {
     if (pageIndex !in 0 until document.pageCount) {
         Box(modifier.fillMaxSize())
@@ -89,9 +93,9 @@ fun PageView(
         val offsetX = (widthPx - cropFitW) / 2f - crop[0] * fitWidthPx
         val offsetY = (heightPx - cropFitH) / 2f - crop[1] * fitHeightPx
 
-        val bitmap by produceState<ImageBitmap?>(initialValue = null, document, pageIndex, fitWidthPx, renderBoost) {
+        val bitmap by produceState<ImageBitmap?>(initialValue = null, document, pageIndex, fitWidthPx, renderBoost, renderScale) {
             // ×1.5 pre ostrosť + zvýšenie pri priblížení
-            value = document.render(pageIndex, (fitWidthPx * 1.5f * renderBoost).toInt()).asImageBitmap()
+            value = document.render(pageIndex, (fitWidthPx * renderScale * renderBoost).toInt()).asImageBitmap()
         }
 
         Box(
@@ -131,6 +135,7 @@ fun PageView(
                     ratio = ratio,
                     fingerDrawing = fingerDrawing,
                 )
+                overlay(pageIndex)
             }
         }
     }

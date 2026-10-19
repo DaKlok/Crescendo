@@ -92,6 +92,8 @@ dependencies {
     implementation(libs.mlkit.face.detection)
     // skenovanie nôt fotoaparátom (orezanie, vyrovnanie, PDF)
     implementation(libs.mlkit.document.scanner)
+    // rozpoznanie názvu a skladateľa z prvej strany pri importe (model cez Google Play služby)
+    implementation(libs.mlkit.text.recognition)
     // spájanie PDF (doplnenie strán do existujúcich nôt) bez straty kvality
     implementation(libs.pdfbox.android)
 

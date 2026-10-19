@@ -1,5 +1,9 @@
 package com.daklok.crescendo.ui.settings
 
+import com.daklok.crescendo.ui.common.Accent
+import com.daklok.crescendo.ui.common.DialogIcon
+import com.daklok.crescendo.ui.common.ExpressiveShapes
+import com.daklok.crescendo.ui.common.WavyLinearProgress
 import androidx.compose.material.icons.outlined.Sync
 import com.daklok.crescendo.ui.common.RemoteAvatar
 import com.daklok.crescendo.CrescendoApp
@@ -19,9 +23,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,7 +32,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudDone
@@ -43,7 +44,6 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.foundation.layout.PaddingValues
@@ -193,7 +193,7 @@ fun BackupSection(
                         },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp),
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.Login, null)
                         Spacer(Modifier.width(8.dp))
@@ -266,7 +266,7 @@ fun BackupSection(
                             },
                             enabled = !busy,
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(vertical = 14.dp),
                         ) {
                             Icon(Icons.Outlined.CloudUpload, null)
                             Spacer(Modifier.width(8.dp))
@@ -276,7 +276,7 @@ fun BackupSection(
                             onClick = { confirmRestore = true },
                             enabled = !busy,
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(vertical = 14.dp),
                         ) {
                             Icon(Icons.Outlined.CloudDownload, null)
                             Spacer(Modifier.width(8.dp))
@@ -339,14 +339,7 @@ fun BackupSection(
                         Spacer(Modifier.height(8.dp))
                         val p = s.progress
                         if (p != null) {
-                            LinearProgressIndicator(
-                                progress = { p },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(50)),
-                                drawStopIndicator = {},
-                            )
+                            WavyLinearProgress(progress = p, moving = true)
                         } else {
                             LinearProgressIndicator(
                                 modifier = Modifier
@@ -368,7 +361,7 @@ fun BackupSection(
         AlertDialog(
             onDismissRequest = { confirmRestore = false },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.CloudDownload, null) },
+            icon = { DialogIcon(Icons.Outlined.CloudDownload, ExpressiveShapes.Cookie12, Accent.Secondary) },
             title = { Text(stringResource(R.string.restore_title)) },
             text = {
                 Text(
@@ -519,7 +512,7 @@ fun LocalBackupSection(backup: BackupManager) {
         AlertDialog(
             onDismissRequest = { pendingImport = null },
             shape = RoundedCornerShape(28.dp),
-            icon = { Icon(Icons.Outlined.FileDownload, null) },
+            icon = { DialogIcon(Icons.Outlined.FileDownload, ExpressiveShapes.Cookie12, Accent.Secondary) },
             title = { Text(stringResource(R.string.restore_title)) },
             text = {
                 Text(
@@ -578,12 +571,8 @@ private fun FileRow(
                 FilledTonalButton(
                     onClick = onClick,
                     enabled = enabled,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                    modifier = Modifier.height(34.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp),
                 ) {
                     Text(buttonLabel, style = MaterialTheme.typography.labelMedium)
                 }

@@ -223,7 +223,6 @@ fun PianoConnectionCard(
                 } else {
                     FilledTonalButton(
                         onClick = { midi.reconnect(btAddress) },
-                        shape = RoundedCornerShape(14.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.Outlined.Link, null, Modifier.size(16.dp))
@@ -238,7 +237,6 @@ fun PianoConnectionCard(
                 } else {
                     FilledTonalButton(
                         onClick = { scanOpen = true },
-                        shape = RoundedCornerShape(14.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.Outlined.Bluetooth, null, Modifier.size(16.dp))
